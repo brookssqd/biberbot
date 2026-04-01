@@ -3037,6 +3037,8 @@ async def setup_hook():
         family_hourly_bonus.start()
     if not cleanup_old_duels.is_running():
         cleanup_old_duels.start()
+            # ЗАПУСКАЕМ ПИНГЕР
+    keep_alive.start() 
 
 @bot.event
 async def on_ready():
@@ -3066,7 +3068,7 @@ async def on_command_error(ctx, error):
         embed = create_embed("❌ Ошибка", f"Произошла ошибка: {str(error)[:100]}", discord.Color.red())
         await ctx.send(embed=embed, delete_after=10)
 
-# ==================== ВЕБ-СЕРВЕР ДЛЯ KOYEB ====================
+# ==================== ВЕБ-СЕРВЕР ДЛЯ RENDER ====================
 try:
     from flask import Flask
     from threading import Thread
@@ -3088,6 +3090,18 @@ try:
     print("🌐 Веб-сервер запущен на порту 8080")
 except ImportError:
     print("⚠️ Flask не установлен, веб-сервер не запущен")
+
+# ==================== ПИНГЕР ДЛЯ RENDER ====================
+@tasks.loop(minutes=10)
+async def keep_alive():
+    """Держит бота активным, чтобы не засыпал"""
+    try:
+        import requests
+        url = "https://biberbot.onrender.com"  # ЗАМЕНИТЕ на ваш URL
+        response = requests.get(url)
+        print(f"🔄 Пинг веб-сервера: {response.status_code}")
+    except Exception as e:
+        print(f"⚠️ Ошибка пинга: {e}")
 
 # ==================== ЗАПУСК ====================
 if __name__ == "__main__":
