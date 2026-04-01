@@ -3082,7 +3082,7 @@ try:
         return "OK", 200
     
     def run_web():
-        app.run(host='0.0.0.0', port=8080)
+        app.run(host='0.0.0.0', port=10000)
     
     Thread(target=run_web, daemon=True).start()
     print("🌐 Веб-сервер запущен на порту 8080")
