@@ -229,19 +229,32 @@ async def pray(ctx):
     try:
         user_id = ctx.author.id
         work = random.choice(WORK_OPTIONS)
-        reward = work["reward"]
+        base_reward = work["reward"]
+        
+        # === БОНУСЫ ОТ АРТЕФАКТОВ ===
+        user_data = get_user_data(user_id)
+        bonus_percent = 0
+        for artifact_id in user_data.get("artifacts", {}):
+            if artifact_id in SHOP_ITEMS:
+                artifact = SHOP_ITEMS[artifact_id]
+                if artifact["type"] in ["permanent", "legendary"]:
+                    if artifact["effect"]["command"] == "pray":
+                        bonus_percent += artifact["effect"]["bonus"]
+        bonus_percent = min(bonus_percent, 300)
+        bonus = int(base_reward * bonus_percent / 100)
+        total_reward = base_reward + bonus
+        # === КОНЕЦ БОНУСОВ ===
         
         from supabase_db import supabase
         
-        # === КОД ИЗ !тестсупа (РАБОЧИЙ) ===
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         
         if response.data:
             current = response.data[0]['balance']
-            new_balance = current + reward
+            new_balance = current + total_reward
             supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).execute()
         else:
-            new_balance = reward
+            new_balance = total_reward
             supabase.table('users').insert({
                 'user_id': user_id,
                 'balance': new_balance,
@@ -249,21 +262,23 @@ async def pray(ctx):
                 'cards': '[]',
                 'completed_combos': '[]'
             }).execute()
-        # === КОНЕЦ КОДА ИЗ !тестсупа ===
         
         embed = create_embed(
             title=f"{EMOJIS['pray']} Вы помолились Биберу!",
             description=f"**{work['name']}**\n\n"
-                       f"Получено: +{reward} {EMOJIS['bibsy']}\n"
+                       f"Получено: +{total_reward} {EMOJIS['bibsy']}\n"
                        f"Баланс: {new_balance} {EMOJIS['bibsy']}",
             color=discord.Color.green(),
             image="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExaHVhcnFnMmVxYmxzdXVnYTZ6Zjd5dm8xa29oeTdteWZhcnZlbzJ5aiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/t9oU3BYnF7fGDtl5PJ/giphy.gif",
             footer="Твой вклад в культуру Бибера"
         )
         
+        if bonus > 0:
+            embed.add_field(name="✨ Бонус от артефактов", value=f"+{bonus} {EMOJIS['bibsy']}", inline=False)
+        
         await loading.stop(True, "Молитва принята!")
         await ctx.send(embed=embed)
-        log_action(user_id, "pray", f"Work: {work['name']}, Reward: {reward}")
+        log_action(user_id, "pray", f"Work: {work['name']}, Reward: {total_reward}")
         
     except Exception as e:
         print(f"[ERROR] pray: {e}")
