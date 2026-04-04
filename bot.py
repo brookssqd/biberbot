@@ -137,13 +137,17 @@ def cooldown(command_name: str):
         async def wrapper(ctx, *args, **kwargs):
             user_id = ctx.author.id
             
-            # Получаем время последнего использования
-            user_data = get_user_data(user_id)
-            last_used = user_data.get(f"last_{command_name}")
+            # Прямое чтение из БД
+            from supabase_db import supabase
+            response = supabase.table('users').select(f'last_{command_name}').eq('user_id', user_id).execute()
             
-            if last_used:
+            last_time_str = None
+            if response.data:
+                last_time_str = response.data[0].get(f'last_{command_name}')
+            
+            if last_time_str:
                 try:
-                    last_time = datetime.fromisoformat(last_used)
+                    last_time = datetime.fromisoformat(last_time_str)
                     elapsed = (datetime.now() - last_time).total_seconds()
                     remaining = COOLDOWNS.get(command_name, 0) - elapsed
                     
@@ -169,11 +173,11 @@ def cooldown(command_name: str):
                 except Exception as e:
                     print(f"[ERROR] cooldown: {e}")
             
+            # Выполняем команду
             result = await func(ctx, *args, **kwargs)
             
             # Обновляем время
-            user_data[f"last_{command_name}"] = datetime.now().isoformat()
-            update_user_data(user_id, user_data)
+            supabase.table('users').update({f'last_{command_name}': datetime.now().isoformat()}).eq('user_id', user_id).execute()
             
             return result
         return wrapper
