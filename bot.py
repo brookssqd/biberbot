@@ -181,6 +181,39 @@ def cooldown(command_name: str):
 
 # ==================== ОСНОВНЫЕ КОМАНДЫ ====================
 
+@bot.command(name='тестсупа')
+@in_command_channel()
+async def test_supa(ctx):
+    """Прямой тест Supabase"""
+    user_id = ctx.author.id
+    
+    try:
+        from supabase_db import supabase
+        
+        # Пытаемся добавить 100
+        response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
+        
+        if response.data:
+            current = response.data[0]['balance']
+            new_balance = current + 100
+            supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).execute()
+            await ctx.send(f"✅ Баланс обновлён: {current} -> {new_balance}")
+        else:
+            supabase.table('users').insert({
+                'user_id': user_id,
+                'balance': 100,
+                'artifacts': '{}',
+                'cards': '[]',
+                'completed_combos': '[]'
+            }).execute()
+            await ctx.send(f"✅ Пользователь создан, баланс: 100")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Ошибка: {e}")
+        print(f"[ERROR] test_supa: {e}")
+        import traceback
+        traceback.print_exc()
+        
 @bot.command(name='молиться')
 @in_command_channel()
 @cooldown("pray")
