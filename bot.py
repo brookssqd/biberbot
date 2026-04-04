@@ -912,6 +912,33 @@ async def give_money(ctx, member: discord.Member, amount: int):
     new_balance = add_balance(member.id, amount)
     await ctx.send(embed=create_embed("✅ Выдано", f"{member.mention} +{amount} {EMOJIS['bibsy']}\nНовый баланс: {new_balance} {EMOJIS['bibsy']}", discord.Color.green()))
 
+@bot.command(name='сброситькулдаун')
+@commands.has_role(ADMIN_ROLE)
+@in_command_channel()
+async def reset_cooldown(ctx, member: discord.Member = None):
+    """Сбросить кулдауны пользователя (только для Admin)"""
+    target = member or ctx.author
+    
+    # Получаем данные пользователя
+    user_data = get_user_data(target.id)
+    
+    # Сбрасываем все кулдауны
+    user_data["last_pray"] = None
+    user_data["last_sermon"] = None
+    user_data["last_repent"] = None
+    user_data["last_ecstasy"] = None
+    user_data["last_proposal"] = None
+    user_data["last_divorce"] = None
+    
+    update_user_data(target.id, user_data)
+    
+    embed = create_embed(
+        "✅ Кулдаун сброшен",
+        f"Кулдауны для {target.mention} сброшены!",
+        discord.Color.green()
+    )
+    await ctx.send(embed=embed)
+    log_action(ctx.author.id, "reset_cooldown", f"Target: {target.id}")
 # ==================== ФОНОВЫЕ ЗАДАЧИ ====================
 
 class BieberEscapeGame:
