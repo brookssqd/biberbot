@@ -12,7 +12,6 @@ SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("⚠️ ВНИМАНИЕ: SUPABASE_URL или SUPABASE_KEY не заданы!")
-    print("Добавьте их в переменные окружения!")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -35,7 +34,6 @@ def log_action(user_id: int, command: str, details: str = ""):
 def add_balance(user_id: int, amount: int) -> int:
     """Добавить/убавить баланс"""
     try:
-        # Получаем текущий баланс
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         
         if response.data:
@@ -182,14 +180,14 @@ def add_card_to_user(user_id: int, card_id: str) -> bool:
 
 def get_user_cards_collection(user_id: int) -> dict:
     """Получить коллекцию карт пользователя"""
+    from bot_data import COLLECTIBLE_CARDS
+    
     try:
         response = supabase.table('users').select('cards').eq('user_id', user_id).execute()
         cards = []
         
         if response.data and response.data[0].get('cards'):
             cards = json.loads(response.data[0]['cards'])
-        
-        from bot_data import COLLECTIBLE_CARDS
         
         collection = {
             "common": [],
@@ -210,148 +208,8 @@ def get_user_cards_collection(user_id: int) -> dict:
     except Exception as e:
         print(f"[ERROR] get_user_cards_collection: {e}")
         return {"common": [], "rare": [], "epic": [], "legendary": [], "mythic": [], "total": 0, "total_possible": 0}
-    
-async def try_drop_card(ctx, command: str):
-    """Проверяет шанс выпадения карты (Supabase версия)"""
-    from bot_data import COLLECTIBLE_CARDS, CARD_RARITY_COLORS, CARD_DROP_COOLDOWN, user_last_card_drop
-    
-    user_id = ctx.author.id
-    current_time = datetime.now()
-    
-    # Проверяем кулдаун
-    if user_id in user_last_card_drop:
-        time_since_last = (current_time - user_last_card_drop[user_id]).total_seconds()
-        if time_since_last < CARD_DROP_COOLDOWN:
-            return False
-    
-    # Шансы выпадения
-    chances = {
-        "молиться": 8,
-        "проповедь": 8,
-        "экстаз": 5,
-        "покаяться": 3,
-        "дуэль": 4,
-        "подарок": 2
-    }
-    
-    chance = chances.get(command, 1)
-    
-    if random.randint(1, 100) <= chance:
-        # Выбираем случайную карту
-        cards_list = list(COLLECTIBLE_CARDS.keys())
-        weights = {
-            "baby_jb": 30,
-            "purpose_jb": 20,
-            "bieber_christmas": 15,
-            "changes_jb": 15,
-            "bieber_acoustic": 10,
-            "justice_jb": 5,
-            "bieber_demon": 4,
-            "bieber_ghost": 2,
-            "bieber_angel": 1
-        }
-        card_id = random.choices(cards_list, weights=[weights.get(c, 10) for c in cards_list])[0]
-        card_info = COLLECTIBLE_CARDS[card_id]
-        
-        # Добавляем карту пользователю через Supabase
-        response = supabase.table('users').select('cards').eq('user_id', user_id).execute()
-        cards = []
-        
-        if response.data and response.data[0].get('cards'):
-            try:
-                cards = json.loads(response.data[0]['cards'])
-            except:
-                cards = []
-        
-        if card_id not in cards:
-            cards.append(card_id)
-            supabase.table('users').update({'cards': json.dumps(cards)}).eq('user_id', user_id).execute()
-            user_last_card_drop[user_id] = current_time
-            
-            from bot_data import create_embed, EMOJIS
-            embed = create_embed(
-                title=f"🎴 НОВАЯ КАРТА!",
-                description=f"Ты получил карту **{card_info['name']}** {card_info['emoji']}\n"
-                           f"Редкость: **{card_info['rarity'].upper()}**\n\n"
-                           f"{card_info['description']}\n\n"
-                           f"⏳ Следующая карта выпадет через **12 часов**!",
-                color=CARD_RARITY_COLORS.get(card_info["rarity"], discord.Color.gold()),
-                image=card_info["image"],
-                footer="Собирай все карты Бибера!"
-            )
-            await ctx.send(embed=embed)
-            return True
-    
-    return False
 
 # ==================== ФУНКЦИИ ДЛЯ КОМБИНАЦИЙ ====================
-user_command_history = {}
-
-async def check_combos(ctx):
-    """Проверка секретных комбинаций (Supabase версия)"""
-    from bot_data import SECRET_COMBOS, create_embed
-    
-    user_id = ctx.author.id
-    
-    if user_id not in user_command_history:
-        user_command_history[user_id] = []
-    
-    user_command_history[user_id].append(ctx.command.name)
-    
-    if len(user_command_history[user_id]) > 10:
-        user_command_history[user_id] = user_command_history[user_id][-10:]
-    
-    for length in range(2, min(8, len(user_command_history[user_id]) + 1)):
-        sequence = user_command_history[user_id][-length:]
-        combo_str = "→".join(sequence)
-        
-        if combo_str in SECRET_COMBOS:
-            # Проверяем, не выполнял ли пользователь эту комбинацию
-            response = supabase.table('users').select('completed_combos').eq('user_id', user_id).execute()
-            completed = []
-            
-            if response.data and response.data[0].get('completed_combos'):
-                try:
-                    completed = json.loads(response.data[0]['completed_combos'])
-                except:
-                    completed = []
-            
-            if combo_str in completed:
-                return
-            
-            combo_data = SECRET_COMBOS[combo_str]
-            
-            # Начисляем награду
-            add_balance(user_id, combo_data["reward"])
-            
-            card_reward = ""
-            if "card" in combo_data:
-                # Добавляем карту
-                card_response = supabase.table('users').select('cards').eq('user_id', user_id).execute()
-                cards = []
-                if card_response.data and card_response.data[0].get('cards'):
-                    try:
-                        cards = json.loads(card_response.data[0]['cards'])
-                    except:
-                        cards = []
-                
-                if combo_data["card"] not in cards:
-                    cards.append(combo_data["card"])
-                    supabase.table('users').update({'cards': json.dumps(cards)}).eq('user_id', user_id).execute()
-                    card_info = COLLECTIBLE_CARDS[combo_data["card"]]
-                    card_reward = f"\n🎴 Получена карта: **{card_info['name']}** {card_info['emoji']}"
-            
-            # Отмечаем комбинацию как выполненную
-            completed.append(combo_str)
-            supabase.table('users').update({'completed_combos': json.dumps(completed)}).eq('user_id', user_id).execute()
-            
-            embed = create_embed(
-                title="🥷 СЕКРЕТНАЯ КОМБИНАЦИЯ!",
-                description=f"{combo_data['message']}{card_reward}\n\n✨ Редкость: **{combo_data['rarity'].upper()}**",
-                color=discord.Color.gold()
-            )
-            await ctx.send(embed=embed)
-            break
 
 def check_secret_combo(user_id: int, command_sequence: list, SECRET_COMBOS: dict) -> Optional[Tuple[str, dict]]:
     """Проверить секретную комбинацию"""
@@ -385,6 +243,48 @@ def complete_combo(user_id: int, combo_str: str):
             supabase.table('users').update({'completed_combos': json.dumps(completed)}).eq('user_id', user_id).execute()
     except Exception as e:
         print(f"[ERROR] complete_combo: {e}")
+
+user_command_history = {}
+
+async def check_combos(ctx):
+    """Проверка секретных комбинаций"""
+    from bot_data import SECRET_COMBOS, create_embed
+    
+    user_id = ctx.author.id
+    
+    if user_id not in user_command_history:
+        user_command_history[user_id] = []
+    
+    user_command_history[user_id].append(ctx.command.name)
+    
+    if len(user_command_history[user_id]) > 10:
+        user_command_history[user_id] = user_command_history[user_id][-10:]
+    
+    for length in range(2, min(8, len(user_command_history[user_id]) + 1)):
+        sequence = user_command_history[user_id][-length:]
+        result = check_secret_combo(user_id, sequence, SECRET_COMBOS)
+        
+        if result:
+            combo_str, combo_data = result
+            
+            add_balance(user_id, combo_data["reward"])
+            
+            card_reward = ""
+            if "card" in combo_data:
+                if add_card_to_user(user_id, combo_data["card"]):
+                    from bot_data import COLLECTIBLE_CARDS
+                    card_info = COLLECTIBLE_CARDS[combo_data["card"]]
+                    card_reward = f"\n🎴 Получена карта: **{card_info['name']}** {card_info['emoji']}"
+            
+            complete_combo(user_id, combo_str)
+            
+            embed = create_embed(
+                title="🥷 СЕКРЕТНАЯ КОМБИНАЦИЯ!",
+                description=f"{combo_data['message']}{card_reward}\n\n✨ Редкость: **{combo_data['rarity'].upper()}**",
+                color=discord.Color.gold()
+            )
+            await ctx.send(embed=embed)
+            break
 
 # ==================== ФУНКЦИИ ДЛЯ СЕМЬИ ====================
 
@@ -470,13 +370,13 @@ def get_family(family_id: int) -> Optional[dict]:
         return None
 
 def add_child_to_family(family_id: int, child_id: int, child_name: str, child_type: str) -> bool:
-    """Добавить ребенка в семью"""
+    """Добавить ребенка в семью (максимум 5 детей)"""
     try:
         family = get_family(family_id)
         if not family:
             return False
         
-        if len(family['children']) >= 10:
+        if len(family['children']) >= 5:
             return False
         
         for child in family['children']:
@@ -650,15 +550,9 @@ def update_bieber_catch_stats(user_id: int, real_catch: bool = True):
     """Обновить статистику ловли Бибера"""
     try:
         if real_catch:
-            supabase.table('bieber_catch').upsert({
-                'user_id': user_id,
-                'catches': supabase.table('bieber_catch').select('catches').eq('user_id', user_id).execute().data[0]['catches'] + 1 if supabase.table('bieber_catch').select('catches').eq('user_id', user_id).execute().data else 1
-            }).execute()
+            supabase.rpc('increment_catch', {'user_id': user_id}).execute()
         else:
-            supabase.table('bieber_catch').upsert({
-                'user_id': user_id,
-                'fake_catches': supabase.table('bieber_catch').select('fake_catches').eq('user_id', user_id).execute().data[0]['fake_catches'] + 1 if supabase.table('bieber_catch').select('fake_catches').eq('user_id', user_id).execute().data else 1
-            }).execute()
+            supabase.rpc('increment_fake_catch', {'user_id': user_id}).execute()
         log_action(user_id, "bieber_catch", f"Real: {real_catch}")
     except Exception as e:
         print(f"[ERROR] update_bieber_catch_stats: {e}")
@@ -725,7 +619,7 @@ class DuelManager:
     @staticmethod
     def cleanup_old_duels():
         try:
-            supabase.table('active_duels').delete().lt('created_at', datetime.now().isoformat()).execute()
+            supabase.table('active_duels').delete().lt('created_at', (datetime.now() - timedelta(minutes=5)).isoformat()).execute()
         except Exception as e:
             print(f"[ERROR] cleanup_old_duels: {e}")
     
