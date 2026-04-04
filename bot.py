@@ -221,6 +221,7 @@ async def test_supa(ctx):
 @bot.command(name='молиться')
 @in_command_channel()
 @add_command_reaction("молиться")
+@cooldown("pray")
 async def pray(ctx):
     loading = LoadingAnimation(ctx, "Молитва обрабатывается", "🙏")
     await loading.start()
