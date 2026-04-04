@@ -27,6 +27,87 @@ intents.reactions = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# ==================== СЕКРЕТНЫЕ КОМБИНАЦИИ ====================
+
+user_command_history = {}
+
+def check_secret_combo(user_id: int, command_sequence: list, SECRET_COMBOS: dict):
+    combo_str = "→".join(command_sequence)
+    
+    if combo_str in SECRET_COMBOS:
+        from supabase_db import supabase
+        import json
+        
+        response = supabase.table('users').select('completed_combos').eq('user_id', user_id).execute()
+        completed = []
+        
+        if response.data and response.data[0].get('completed_combos'):
+            completed = json.loads(response.data[0]['completed_combos'])
+        
+        if combo_str in completed:
+            return None
+        
+        return (combo_str, SECRET_COMBOS[combo_str])
+    
+    return None
+
+def complete_combo(user_id: int, combo_str: str):
+    from supabase_db import supabase
+    import json
+    
+    try:
+        response = supabase.table('users').select('completed_combos').eq('user_id', user_id).execute()
+        completed = []
+        
+        if response.data and response.data[0].get('completed_combos'):
+            completed = json.loads(response.data[0]['completed_combos'])
+        
+        if combo_str not in completed:
+            completed.append(combo_str)
+            supabase.table('users').update({'completed_combos': json.dumps(completed)}).eq('user_id', user_id).execute()
+    except Exception as e:
+        print(f"[ERROR] complete_combo: {e}")
+
+async def check_combos(ctx):
+    from bot_data import SECRET_COMBOS
+    from supabase_db import add_balance, add_card_to_user
+    from bot_data import COLLECTIBLE_CARDS
+    
+    user_id = ctx.author.id
+    
+    if user_id not in user_command_history:
+        user_command_history[user_id] = []
+    
+    user_command_history[user_id].append(ctx.command.name)
+    
+    if len(user_command_history[user_id]) > 10:
+        user_command_history[user_id] = user_command_history[user_id][-10:]
+    
+    for length in range(2, min(8, len(user_command_history[user_id]) + 1)):
+        sequence = user_command_history[user_id][-length:]
+        result = check_secret_combo(user_id, sequence, SECRET_COMBOS)
+        
+        if result:
+            combo_str, combo_data = result
+            
+            add_balance(user_id, combo_data["reward"])
+            
+            card_reward = ""
+            if "card" in combo_data:
+                if add_card_to_user(user_id, combo_data["card"]):
+                    card_info = COLLECTIBLE_CARDS[combo_data["card"]]
+                    card_reward = f"\n🎴 Получена карта: **{card_info['name']}** {card_info['emoji']}"
+            
+            complete_combo(user_id, combo_str)
+            
+            embed = create_embed(
+                title="🥷 СЕКРЕТНАЯ КОМБИНАЦИЯ!",
+                description=f"{combo_data['message']}{card_reward}\n\n✨ Редкость: **{combo_data['rarity'].upper()}**",
+                color=discord.Color.gold()
+            )
+            await ctx.send(embed=embed)
+            break
+        
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
 def create_embed(title: str, description: str = "", color: discord.Color = None, 

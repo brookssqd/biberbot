@@ -244,47 +244,6 @@ def complete_combo(user_id: int, combo_str: str):
     except Exception as e:
         print(f"[ERROR] complete_combo: {e}")
 
-user_command_history = {}
-
-async def check_combos(ctx):
-    """Проверка секретных комбинаций"""
-    from bot_data import SECRET_COMBOS, create_embed
-    
-    user_id = ctx.author.id
-    
-    if user_id not in user_command_history:
-        user_command_history[user_id] = []
-    
-    user_command_history[user_id].append(ctx.command.name)
-    
-    if len(user_command_history[user_id]) > 10:
-        user_command_history[user_id] = user_command_history[user_id][-10:]
-    
-    for length in range(2, min(8, len(user_command_history[user_id]) + 1)):
-        sequence = user_command_history[user_id][-length:]
-        result = check_secret_combo(user_id, sequence, SECRET_COMBOS)
-        
-        if result:
-            combo_str, combo_data = result
-            
-            add_balance(user_id, combo_data["reward"])
-            
-            card_reward = ""
-            if "card" in combo_data:
-                if add_card_to_user(user_id, combo_data["card"]):
-                    from bot_data import COLLECTIBLE_CARDS
-                    card_info = COLLECTIBLE_CARDS[combo_data["card"]]
-                    card_reward = f"\n🎴 Получена карта: **{card_info['name']}** {card_info['emoji']}"
-            
-            complete_combo(user_id, combo_str)
-            
-            embed = create_embed(
-                title="🥷 СЕКРЕТНАЯ КОМБИНАЦИЯ!",
-                description=f"{combo_data['message']}{card_reward}\n\n✨ Редкость: **{combo_data['rarity'].upper()}**",
-                color=discord.Color.gold()
-            )
-            await ctx.send(embed=embed)
-            break
 
 # ==================== ФУНКЦИИ ДЛЯ СЕМЬИ ====================
 
