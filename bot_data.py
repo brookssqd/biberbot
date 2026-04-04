@@ -1,3 +1,5 @@
+import discord
+
 # ==================== НАСТРОЙКИ ====================
 ADMIN_ROLE = "Admin"
 CURRENCY_NAME = "Бибсы"
