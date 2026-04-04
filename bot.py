@@ -224,21 +224,43 @@ async def pray(ctx):
     
     try:
         user_id = ctx.author.id
+        work = random.choice(WORK_OPTIONS)
+        base_reward = work["reward"]
         
-        # Просто добавляем 50 бибсов
-        new_balance = add_balance(user_id, 50)
+        from supabase_db import supabase
+        
+        # Получаем текущий баланс
+        response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
+        
+        if response.data:
+            current = response.data[0]['balance']
+            new_balance = current + base_reward
+            supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).execute()
+        else:
+            new_balance = base_reward
+            supabase.table('users').insert({
+                'user_id': user_id,
+                'balance': new_balance,
+                'artifacts': '{}',
+                'cards': '[]',
+                'completed_combos': '[]'
+            }).execute()
+        
+        print(f"[PRAY] {user_id}: +{base_reward} -> {new_balance}")
         
         embed = create_embed(
             title=f"{EMOJIS['pray']} Вы помолились Биберу!",
-            description=f"Получено: +50 {EMOJIS['bibsy']}\n"
+            description=f"**{work['name']}**\n\n"
+                       f"Получено: +{base_reward} {EMOJIS['bibsy']}\n"
                        f"Баланс: {new_balance} {EMOJIS['bibsy']}",
             color=discord.Color.green(),
+            image="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExaHVhcnFnMmVxYmxzdXVnYTZ6Zjd5dm8xa29oeTdteWZhcnZlbzJ5aiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/t9oU3BYnF7fGDtl5PJ/giphy.gif",
             footer="Твой вклад в культуру Бибера"
         )
         
         await loading.stop(True, "Молитва принята!")
         await ctx.send(embed=embed)
-        log_action(user_id, "pray", "Simplified version")
+        log_action(user_id, "pray", f"Work: {work['name']}, Reward: {base_reward}")
         
     except Exception as e:
         print(f"[ERROR] pray: {e}")
