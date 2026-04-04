@@ -220,8 +220,6 @@ async def test_supa(ctx):
         
 @bot.command(name='молиться')
 @in_command_channel()
-@cooldown("pray")
-@add_command_reaction("молиться")
 async def pray(ctx):
     loading = LoadingAnimation(ctx, "Молитва обрабатывается", "🙏")
     await loading.start()
@@ -229,19 +227,19 @@ async def pray(ctx):
     try:
         user_id = ctx.author.id
         work = random.choice(WORK_OPTIONS)
-        base_reward = work["reward"]
+        reward = work["reward"]
         
         from supabase_db import supabase
         
-        # Получаем текущий баланс
+        # === КОД ИЗ !тестсупа (РАБОЧИЙ) ===
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         
         if response.data:
             current = response.data[0]['balance']
-            new_balance = current + base_reward
+            new_balance = current + reward
             supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).execute()
         else:
-            new_balance = base_reward
+            new_balance = reward
             supabase.table('users').insert({
                 'user_id': user_id,
                 'balance': new_balance,
@@ -249,13 +247,12 @@ async def pray(ctx):
                 'cards': '[]',
                 'completed_combos': '[]'
             }).execute()
-        
-        print(f"[PRAY] {user_id}: +{base_reward} -> {new_balance}")
+        # === КОНЕЦ КОДА ИЗ !тестсупа ===
         
         embed = create_embed(
             title=f"{EMOJIS['pray']} Вы помолились Биберу!",
             description=f"**{work['name']}**\n\n"
-                       f"Получено: +{base_reward} {EMOJIS['bibsy']}\n"
+                       f"Получено: +{reward} {EMOJIS['bibsy']}\n"
                        f"Баланс: {new_balance} {EMOJIS['bibsy']}",
             color=discord.Color.green(),
             image="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExaHVhcnFnMmVxYmxzdXVnYTZ6Zjd5dm8xa29oeTdteWZhcnZlbzJ5aiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/t9oU3BYnF7fGDtl5PJ/giphy.gif",
@@ -264,7 +261,7 @@ async def pray(ctx):
         
         await loading.stop(True, "Молитва принята!")
         await ctx.send(embed=embed)
-        log_action(user_id, "pray", f"Work: {work['name']}, Reward: {base_reward}")
+        log_action(user_id, "pray", f"Work: {work['name']}, Reward: {reward}")
         
     except Exception as e:
         print(f"[ERROR] pray: {e}")
