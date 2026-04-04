@@ -186,83 +186,32 @@ def cooldown(command_name: str):
 @cooldown("pray")
 @add_command_reaction("молиться")
 async def pray(ctx):
-    print(f"[DEBUG] === МОЛИТЬСЯ НАЧАЛО ===")
-    print(f"[DEBUG] Пользователь: {ctx.author.id}")
-    
     loading = LoadingAnimation(ctx, "Молитва обрабатывается", "🙏")
     await loading.start()
     
     try:
         user_id = ctx.author.id
-        work = random.choice(WORK_OPTIONS)
-        base_reward = work["reward"]
         
-        print(f"[DEBUG] base_reward: {base_reward}")
-        
-        # Получаем бонус от артефактов
-        user_data = get_user_data(user_id)
-        print(f"[DEBUG] user_data получены")
-        
-        bonus_percent = 0
-        for artifact_id in user_data.get("artifacts", {}):
-            if artifact_id in SHOP_ITEMS:
-                artifact = SHOP_ITEMS[artifact_id]
-                if artifact["type"] in ["permanent", "legendary"]:
-                    if artifact["effect"]["command"] == "pray":
-                        bonus_percent += artifact["effect"]["bonus"]
-        
-        bonus_percent = min(bonus_percent, 300)
-        bonus = int(base_reward * bonus_percent / 100)
-        total_reward = base_reward + bonus
-        
-        print(f"[DEBUG] bonus: {bonus}, total_reward: {total_reward}")
-        
-        # ПРЯМАЯ ПРОВЕРКА: обновляем баланс и сразу проверяем
-        print(f"[DEBUG] Пытаемся обновить баланс...")
-        
-        # Получаем баланс ДО
-        balance_before = get_balance(user_id)
-        print(f"[DEBUG] Баланс ДО: {balance_before}")
-        
-        # Обновляем баланс
-        new_balance = add_balance(user_id, total_reward)
-        print(f"[DEBUG] add_balance вернула: {new_balance}")
-        
-        # Получаем баланс ПОСЛЕ
-        balance_after = get_balance(user_id)
-        print(f"[DEBUG] Баланс ПОСЛЕ: {balance_after}")
-        
-        if balance_after == balance_before:
-            print(f"[ERROR] БАЛАНС НЕ ИЗМЕНИЛСЯ!")
-        
-        await try_drop_card(ctx, "молиться")
-        await check_combos(ctx)
+        # Просто добавляем 50 бибсов
+        new_balance = add_balance(user_id, 50)
         
         embed = create_embed(
             title=f"{EMOJIS['pray']} Вы помолились Биберу!",
-            description=f"**{work['name']}**\n\n"
-                       f"Получено: +{total_reward} {EMOJIS['bibsy']}\n"
-                       f"Баланс: {balance_after} {EMOJIS['bibsy']}",
+            description=f"Получено: +50 {EMOJIS['bibsy']}\n"
+                       f"Баланс: {new_balance} {EMOJIS['bibsy']}",
             color=discord.Color.green(),
-            image="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExaHVhcnFnMmVxYmxzdXVnYTZ6Zjd5dm8xa29oeTdteWZhcnZlbzJ5aiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/t9oU3BYnF7fGDtl5PJ/giphy.gif",
             footer="Твой вклад в культуру Бибера"
         )
         
-        if bonus > 0:
-            embed.add_field(name="✨ Бонус от артефактов", value=f"+{bonus} {EMOJIS['bibsy']}", inline=False)
-        
         await loading.stop(True, "Молитва принята!")
         await ctx.send(embed=embed)
-        log_action(user_id, "pray", f"Work: {work['name']}, Reward: {total_reward}")
-        
-        print(f"[DEBUG] === МОЛИТЬСЯ КОНЕЦ ===")
+        log_action(user_id, "pray", "Simplified version")
         
     except Exception as e:
-        print(f"[ERROR] Ошибка в молитве: {e}")
+        print(f"[ERROR] pray: {e}")
         import traceback
         traceback.print_exc()
         await loading.stop(False, f"Ошибка: {str(e)[:50]}")
-        raise e
 
 @bot.command(name='проповедь')
 @in_command_channel()
