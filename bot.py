@@ -231,7 +231,7 @@ async def pray(ctx):
         work = random.choice(WORK_OPTIONS)
         base_reward = work["reward"]
         
-        # === БОНУСЫ ОТ АРТЕФАКТОВ ===
+        # Бонусы от артефактов
         user_data = get_user_data(user_id)
         bonus_percent = 0
         for artifact_id in user_data.get("artifacts", {}):
@@ -243,10 +243,8 @@ async def pray(ctx):
         bonus_percent = min(bonus_percent, 300)
         bonus = int(base_reward * bonus_percent / 100)
         total_reward = base_reward + bonus
-        # === КОНЕЦ БОНУСОВ ===
         
-        from supabase_db import supabase
-        
+        # Обновляем баланс
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         
         if response.data:
@@ -262,6 +260,10 @@ async def pray(ctx):
                 'cards': '[]',
                 'completed_combos': '[]'
             }).execute()
+        
+        # КАРТОЧКИ И КОМБИНАЦИИ (ВЕРНУЛИ)
+        await try_drop_card(ctx, "молиться")
+        await check_combos(ctx)
         
         embed = create_embed(
             title=f"{EMOJIS['pray']} Вы помолились Биберу!",
