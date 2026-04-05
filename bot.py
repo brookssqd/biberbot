@@ -1373,86 +1373,216 @@ async def leave_family(ctx):
 @in_command_channel()
 @add_command_reaction("дуэль")
 async def duel(ctx, member: discord.Member = None, amount: int = None):
+    """Вызвать на дуэль. Использование: !дуэль @участник 50-150"""
     if not member or not amount:
         embed = create_embed("⚔️ Использование", "`!дуэль @участник 50-150`", discord.Color.blue())
         await ctx.send(embed=embed)
         return
     
+    if member == ctx.author:
+        embed = create_embed("❌ Ошибка", "Нельзя вызвать самого себя!", discord.Color.red())
+        await ctx.send(embed=embed)
+        return
+    
     if not (50 <= amount <= 150):
-        embed = create_embed("❌ Ошибка", "Ставка: 50-150 бибсов!", discord.Color.red())
+        embed = create_embed("❌ Ошибка", "Ставка должна быть от 50 до 150 бибсов!", discord.Color.red())
         await ctx.send(embed=embed)
         return
     
+    # Проверяем лимит дуэлей в день
     if DuelManager.get_daily_duel_count(ctx.author.id) >= 3:
-        embed = create_embed("❌ Лимит", "3 дуэли в день!", discord.Color.red())
+        embed = create_embed("❌ Лимит", "Вы уже провели 3 дуэли сегодня!", discord.Color.red())
         await ctx.send(embed=embed)
         return
     
+    # Проверяем баланс вызывающего
     if get_balance(ctx.author.id) < amount:
-        embed = create_embed("❌ Недостаточно средств", "", discord.Color.red())
+        embed = create_embed("❌ Недостаточно средств", f"У вас нет {amount} {EMOJIS['bibsy']} для ставки!", discord.Color.red())
         await ctx.send(embed=embed)
         return
     
+    # Проверяем, нет ли уже дуэли в этом канале
     if DuelManager.get_duel(ctx.channel.id):
-        embed = create_embed("❌ Ошибка", "Дуэль уже идет в этом канале!", discord.Color.red())
+        embed = create_embed("❌ Ошибка", "В этом канале уже идёт дуэль!", discord.Color.red())
         await ctx.send(embed=embed)
         return
+    
+    # Проверяем, не занят ли участник
+    for channel in bot.get_all_channels():
+        duel = DuelManager.get_duel(channel.id)
+        if duel and (duel["challenger_id"] == member.id or duel["target_id"] == member.id):
+            embed = create_embed("❌ Ошибка", f"{member.mention} уже участвует в другой дуэли!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
     
     DuelManager.create_duel(ctx.channel.id, ctx.author.id, member.id, amount)
     
     embed = create_embed(
-        "⚔️ Вызов на дуэль!",
-        f"{ctx.author.mention} вызывает {member.mention} на дуэль!\nСтавка: {amount} {EMOJIS['bibsy']}\n\n"
-        f"{member.mention}, напишите `!принять` или `!отказаться`",
+        "⚔️ ВЫЗОВ НА ДУЭЛЬ!",
+        f"{ctx.author.mention} вызывает {member.mention} на дуэль!\n\n"
+        f"💰 Ставка: {amount} {EMOJIS['bibsy']}\n\n"
+        f"📝 {member.mention}, напишите `!принятьдуэль` чтобы принять вызов!\n"
+        f"❌ Чтобы отменить, напишите `!отменитьдуэль`",
         discord.Color.gold()
     )
     await ctx.send(embed=embed)
-    log_action(ctx.author.id, "duel_start", f"Target: {member.id}")
+    log_action(ctx.author.id, "duel_start", f"Target: {member.id}, Amount: {amount}")
+
+@bot.command(name='принятьдуэль')
+@in_command_channel()
+@add_command_reaction("принятьдуэль")
+async def accept_duel(ctx):
+    """Принять вызов на дуэль"""
+    try:
+        duel_data = DuelManager.get_duel(ctx.channel.id)
+        
+        if not duel_data:
+            embed = create_embed("❌ Ошибка", "Нет активной дуэли в этом канале!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        if ctx.author.id != duel_data["target_id"]:
+            embed = create_embed("❌ Ошибка", "Эта дуэль не для вас!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        if get_balance(ctx.author.id) < duel_data["amount"]:
+            embed = create_embed("❌ Недостаточно средств", f"У вас нет {duel_data['amount']} {EMOJIS['bibsy']} для участия в дуэли!", discord.Color.red())
+            DuelManager.delete_duel(ctx.channel.id)
+            await ctx.send(embed=embed)
+            return
+        
+        DuelManager.accept_duel(ctx.channel.id, ctx.author.id)
+        
+        embed = create_embed(
+            "⚔️ ДУЭЛЬ ПРИНЯТА!",
+            f"{ctx.author.mention} принял вызов!\n\n"
+            f"⚔️ Оба участника, напишите `!бой` чтобы начать сражение!",
+            discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+        log_action(ctx.author.id, "accept_duel", f"Channel: {ctx.channel.id}")
+        
+    except Exception as e:
+        print(f"[ERROR] accept_duel: {e}")
+        embed = create_embed("❌ Ошибка", f"Произошла ошибка: {str(e)[:100]}", discord.Color.red())
+        await ctx.send(embed=embed)
 
 @bot.command(name='бой')
 @in_command_channel()
 @add_command_reaction("бой")
 async def fight(ctx):
-    duel_data = DuelManager.get_duel(ctx.channel.id)
-    if not duel_data or not duel_data["accepted"]:
-        await ctx.send(embed=create_embed("❌ Ошибка", "Дуэль не принята!", discord.Color.red()))
-        return
-    
-    if ctx.author.id not in [duel_data["challenger_id"], duel_data["target_id"]]:
-        await ctx.send(embed=create_embed("❌ Ошибка", "Вы не участник!", discord.Color.red()))
-        return
-    
-    ready_count = DuelManager.add_fighter_ready(ctx.channel.id, ctx.author.id)
-    
-    if ready_count < 2:
-        embed = create_embed("⚔️ Готов к бою!", f"{ctx.author.mention} готов! Ждем второго...", discord.Color.gold())
+    """Начать бой (после принятия дуэли)"""
+    try:
+        duel_data = DuelManager.get_duel(ctx.channel.id)
+        
+        if not duel_data:
+            embed = create_embed("❌ Ошибка", "Нет активной дуэли в этом канале!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        if not duel_data["accepted"]:
+            embed = create_embed("❌ Ошибка", "Дуэль ещё не принята! Ожидайте согласия соперника.", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        if ctx.author.id not in [duel_data["challenger_id"], duel_data["target_id"]]:
+            embed = create_embed("❌ Ошибка", "Вы не участник этой дуэли!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        ready_count = DuelManager.add_fighter_ready(ctx.channel.id, ctx.author.id)
+        
+        if ready_count < 2:
+            embed = create_embed("⚔️ ГОТОВ К БОЮ!", f"{ctx.author.mention} готов! Ожидаем второго участника...", discord.Color.gold())
+            await ctx.send(embed=embed)
+            return
+        
+        challenger = bot.get_user(duel_data["challenger_id"]) or await bot.fetch_user(duel_data["challenger_id"])
+        target = bot.get_user(duel_data["target_id"]) or await bot.fetch_user(duel_data["target_id"])
+        amount = duel_data["amount"]
+        
+        # Анимация боя
+        embed = create_embed(
+            "⚔️ БОЙ НАЧАЛСЯ! ⚔️",
+            f"{challenger.mention} vs {target.mention}\n\n"
+            f"💰 Ставка: {amount} {EMOJIS['bibsy']}\n\n"
+            f"**Бой идёт...**",
+            discord.Color.gold()
+        )
+        msg = await ctx.send(embed=embed)
+        
+        await asyncio.sleep(2)
+        
+        # Снимаем ставки
+        add_balance(challenger.id, -amount)
+        add_balance(target.id, -amount)
+        
+        # Определяем победителя
+        winner = random.choice([challenger, target])
+        loser = target if winner == challenger else challenger
+        reward = amount * 2
+        add_balance(winner.id, reward)
+        
+        # Шанс выпадения карты
+        await try_drop_card(ctx, "дуэль")
+        
+        # Обновляем статистику
+        DuelManager.increment_duel_count(winner.id, True)
+        DuelManager.increment_duel_count(loser.id, False)
+        DuelManager.delete_duel(ctx.channel.id)
+        
+        embed = create_embed(
+            "⚔️ ДУЭЛЬ ЗАВЕРШЕНА! ⚔️",
+            f"{challenger.mention} vs {target.mention}\n\n"
+            f"🏆 **ПОБЕДИТЕЛЬ: {winner.mention}** 🏆\n\n"
+            f"💰 Выигрыш: {reward} {EMOJIS['bibsy']}\n\n"
+            f"💔 Проигравший: {loser.mention}",
+            discord.Color.green()
+        )
+        await msg.edit(embed=embed)
+        log_action(winner.id, "duel_win", f"Amount: {reward}, Loser: {loser.id}")
+        
+    except Exception as e:
+        print(f"[ERROR] fight: {e}")
+        embed = create_embed("❌ Ошибка", f"Произошла ошибка: {str(e)[:100]}", discord.Color.red())
         await ctx.send(embed=embed)
-        return
-    
-    challenger = bot.get_user(duel_data["challenger_id"]) or await bot.fetch_user(duel_data["challenger_id"])
-    target = bot.get_user(duel_data["target_id"]) or await bot.fetch_user(duel_data["target_id"])
-    amount = duel_data["amount"]
-    
-    add_balance(challenger.id, -amount)
-    add_balance(target.id, -amount)
-    
-    winner = random.choice([challenger, target])
-    reward = amount * 2
-    add_balance(winner.id, reward)
-    
-    await try_drop_card(ctx, "дуэль")
-    
-    DuelManager.increment_duel_count(winner.id, True)
-    DuelManager.increment_duel_count(target.id if winner == challenger else challenger.id, False)
-    DuelManager.delete_duel(ctx.channel.id)
-    
-    embed = create_embed(
-        "⚔️ Дуэль завершена!",
-        f"⚔️ {challenger.mention} vs {target.mention} ⚔️\n\n🏆 Победитель: {winner.mention} получает {reward} {EMOJIS['bibsy']}!",
-        discord.Color.green()
-    )
-    await ctx.send(embed=embed)
-    log_action(winner.id, "duel_win", f"Amount: {reward}")
+
+@bot.command(name='отменитьдуэль')
+@in_command_channel()
+@add_command_reaction("отменитьдуэль")
+async def cancel_duel(ctx):
+    """Отменить текущую дуэль в канале (могут участники)"""
+    try:
+        duel_data = DuelManager.get_duel(ctx.channel.id)
+        
+        if not duel_data:
+            embed = create_embed("❌ Ошибка", "Нет активной дуэли в этом канале!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        if ctx.author.id not in [duel_data["challenger_id"], duel_data["target_id"]]:
+            embed = create_embed("❌ Ошибка", "Вы не участник этой дуэли!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        challenger = bot.get_user(duel_data["challenger_id"]) or await bot.fetch_user(duel_data["challenger_id"])
+        target = bot.get_user(duel_data["target_id"]) or await bot.fetch_user(duel_data["target_id"])
+        
+        DuelManager.delete_duel(ctx.channel.id)
+        
+        embed = create_embed(
+            "❌ ДУЭЛЬ ОТМЕНЕНА",
+            f"Дуэль между {challenger.mention} и {target.mention} отменена по просьбе {ctx.author.mention}!",
+            discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
+        log_action(ctx.author.id, "cancel_duel", f"Channel: {ctx.channel.id}")
+        
+    except Exception as e:
+        print(f"[ERROR] cancel_duel: {e}")
+        embed = create_embed("❌ Ошибка", f"Произошла ошибка: {str(e)[:100]}", discord.Color.red())
+        await ctx.send(embed=embed)
 
 # ==================== ЛОВЛЯ БИБЕРА ====================
 
@@ -1625,18 +1755,129 @@ async def stats(ctx, member: discord.Member = None):
 @bot.command(name='помощь')
 @in_command_channel()
 async def help_command(ctx):
-    embed = create_embed("📚 Помощь BiberBOT", "Список команд:", discord.Color.blue())
+    """Показать список всех команд"""
+    embed = create_embed(
+        "📚 ПОМОЩЬ BIBERBOT",
+        "Вот список всех доступных команд:",
+        discord.Color.blue()
+    )
     
-    embed.add_field(name="💰 Заработок", value="`!молиться` `!проповедь` `!экстаз` `!покаяться`", inline=False)
-    embed.add_field(name="🎴 Коллекционирование", value="`!коллекция` `!картакд` `!шансыкарт`", inline=False)
-    embed.add_field(name="🎉 Развлечения", value="`!поцелуй` `!обнять` `!ударить` `!угостить` `!любовь` `!комплимент`", inline=False)
-    embed.add_field(name="🎁 Подарки", value="`!подарок` `!моиподарки` `!топподарков`", inline=False)
-    embed.add_field(name="👪 Семья", value="`!предложить` `!принять` `!отказаться` `!моясемья` `!добавитьребенка` `!улучшитьсемью` `!развестись` `!дети` `!исключитьребенка` `!выйти`", inline=False)
-    embed.add_field(name="🛒 Магазин", value="`!магазин` `!купить` `!артефакты`", inline=False)
-    embed.add_field(name="🎮 Игры", value="`!поймать` `!дуэль` `!бой`", inline=False)
-    embed.add_field(name="💸 Прочее", value="`!передать` `!признание`", inline=False)
-    embed.add_field(name="ℹ Информация", value="`!баланс` `!топ` `!фанаты` `!статистика`", inline=False)
+    # Заработок
+    embed.add_field(
+        name="💰 ЗАРАБОТОК",
+        value="`!молиться` - заработать бибсы\n"
+              "`!проповедь` - заработать бибсы\n"
+              "`!экстаз` - рискнуть (5% успеха)\n"
+              "`!покаяться` - шанс получить бибсы",
+        inline=False
+    )
     
+    # Коллекционирование
+    embed.add_field(
+        name="🎴 КОЛЛЕКЦИОНИРОВАНИЕ",
+        value="`!коллекция` - показать коллекцию карт\n"
+              "`!картакд` - показать кулдаун карт\n"
+              "`!шансыкарт` - шансы выпадения карт",
+        inline=False
+    )
+    
+    # Развлечения
+    embed.add_field(
+        name="🎉 РАЗВЛЕЧЕНИЯ",
+        value="`!поцелуй @участник` - поцеловать\n"
+              "`!обнять @участник` - обнять\n"
+              "`!ударить @участник` - ударить\n"
+              "`!угостить @участник` - угостить\n"
+              "`!любовь @участник` - заняться любовью\n"
+              "`!комплимент [@участник]` - получить комплимент",
+        inline=False
+    )
+    
+    # Семья
+    embed.add_field(
+        name="👪 СЕМЬЯ",
+        value="`!предложить @участник текст` - сделать предложение\n"
+              "`!принять ID` - принять предложение\n"
+              "`!отказаться ID` - отказаться\n"
+              "`!моясемья` - информация о семье\n"
+              "`!добавитьребенка @участник имя тип` - добавить ребёнка (сын/дочь)\n"
+              "`!исключитьребенка @участник` - исключить ребёнка\n"
+              "`!улучшитьсемью` - улучшить семью\n"
+              "`!дети` - список детей\n"
+              "`!развестись` - развод\n"
+              "`!выйти` - выйти из семьи (для детей)",
+        inline=False
+    )
+    
+    # Дуэли
+    embed.add_field(
+        name="⚔️ ДУЭЛИ",
+        value="`!дуэль @участник 50-150` - вызвать на дуэль\n"
+              "`!принятьдуэль` - принять дуэль\n"
+              "`!бой` - начать бой\n"
+              "`!отменитьдуэль` - отменить дуэль",
+        inline=False
+    )
+    
+    # Подарки
+    embed.add_field(
+        name="🎁 ПОДАРКИ",
+        value="`!подарок @участник` - отправить подарок\n"
+              "`!моиподарки` - посмотреть подарки\n"
+              "`!топподарков` - топ получателей подарков",
+        inline=False
+    )
+    
+    # Магазин
+    embed.add_field(
+        name="🛒 МАГАЗИН",
+        value="`!магазин` - список товаров\n"
+              "`!купить название` - купить артефакт\n"
+              "`!артефакты` - ваши артефакты",
+        inline=False
+    )
+    
+    # Игры
+    embed.add_field(
+        name="🎮 ИГРЫ",
+        value="`!поймать` - поймать Бибера (появляется случайно)\n"
+              "`!передать @участник сумма` - передать бибсы",
+        inline=False
+    )
+    
+    # Информация
+    embed.add_field(
+        name="ℹ️ ИНФОРМАЦИЯ",
+        value="`!баланс [@участник]` - проверить баланс\n"
+              "`!топ` - топ по балансу\n"
+              "`!фанаты` - топ ловцов Бибера\n"
+              "`!статистика [@участник]` - статистика\n"
+              "`!помощь` - это сообщение",
+        inline=False
+    )
+    
+    # Признания
+    embed.add_field(
+        name="💌 ПРИЗНАНИЯ",
+        value="`!признание текст` - анонимное признание",
+        inline=False
+    )
+    
+    # Админ-команды (видны только админам)
+    if ctx.author.guild_permissions.administrator or commands.has_role(ADMIN_ROLE):
+        embed.add_field(
+            name="👑 АДМИН-КОМАНДЫ",
+            value="`!выдать @участник сумма` - выдать бибсы\n"
+                  "`!забрать @участник сумма` - забрать бибсы\n"
+                  "`!сброситькулдаун [@участник]` - сбросить кулдаун\n"
+                  "`!датькарту @участник название` - выдать карту\n"
+                  "`!сброситьбд ДА` - ПОЛНОСТЬЮ СБРОСИТЬ БД\n"
+                  "`!админотмена [#канал]` - отменить дуэль\n"
+                  "`!дуэлисписок` - список активных дуэлей",
+            inline=False
+        )
+    
+    embed.set_footer(text="Бибер всегда с тобой! 🙏")
     await ctx.send(embed=embed)
 
 # ==================== ПОДАРКИ ====================
@@ -1949,7 +2190,84 @@ async def reset_database(ctx, confirm: str = None):
         await ctx.send(embed=embed)
         print(f"[ERROR] reset_database: {e}")
 
+@bot.command(name='админотмена')
+@commands.has_role(ADMIN_ROLE)
+@in_command_channel()
+async def admin_cancel_duel(ctx, channel_id: int = None):
+    """Принудительно отменить дуэль (только Admin)"""
+    try:
+        if channel_id:
+            duel_data = DuelManager.get_duel(channel_id)
+            target_channel = bot.get_channel(channel_id)
+        else:
+            duel_data = DuelManager.get_duel(ctx.channel.id)
+            target_channel = ctx.channel
         
+        if not duel_data:
+            embed = create_embed("❌ Ошибка", "Нет активной дуэли в этом канале!", discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        challenger = bot.get_user(duel_data["challenger_id"]) or await bot.fetch_user(duel_data["challenger_id"])
+        target = bot.get_user(duel_data["target_id"]) or await bot.fetch_user(duel_data["target_id"])
+        
+        DuelManager.delete_duel(duel_data["channel_id"])
+        
+        embed = create_embed(
+            "👑 ДУЭЛЬ ПРИНУДИТЕЛЬНО ОТМЕНЕНА",
+            f"Дуэль между {challenger.mention} и {target.mention} отменена администратором {ctx.author.mention}!",
+            discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        
+        if target_channel and target_channel.id != ctx.channel.id:
+            await target_channel.send(embed=embed)
+        
+        log_action(ctx.author.id, "admin_cancel_duel", f"Channel: {duel_data['channel_id']}")
+        
+    except Exception as e:
+        print(f"[ERROR] admin_cancel_duel: {e}")
+        embed = create_embed("❌ Ошибка", f"Произошла ошибка: {str(e)[:100]}", discord.Color.red())
+        await ctx.send(embed=embed)
+
+@bot.command(name='дуэлисписок')
+@commands.has_role(ADMIN_ROLE)
+@in_command_channel()
+async def list_duels(ctx):
+    """Показать все активные дуэли (только Admin)"""
+    try:
+        response = supabase.table('active_duels').select('*').execute()
+        duels = response.data
+        
+        if not duels:
+            embed = create_embed("⚔️ Активные дуэли", "Нет активных дуэлей.", discord.Color.blue())
+            await ctx.send(embed=embed)
+            return
+        
+        embed = create_embed("⚔️ АКТИВНЫЕ ДУЭЛИ", f"Всего: {len(duels)}", discord.Color.gold())
+        
+        for duel in duels:
+            challenger = bot.get_user(duel["challenger_id"]) or await bot.fetch_user(duel["challenger_id"])
+            target = bot.get_user(duel["target_id"]) or await bot.fetch_user(duel["target_id"])
+            channel = bot.get_channel(duel["channel_id"])
+            
+            status = "✅ Принята" if duel["accepted"] else "⏳ Ожидает принятия"
+            
+            embed.add_field(
+                name=f"📌 Канал: {channel.mention if channel else duel['channel_id']}",
+                value=f"⚔️ {challenger.display_name} vs {target.display_name}\n"
+                      f"💰 Ставка: {duel['amount']} {EMOJIS['bibsy']}\n"
+                      f"📊 Статус: {status}",
+                inline=False
+            )
+        
+        embed.set_footer(text="Используйте !админотмена #канал для отмены дуэли")
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        print(f"[ERROR] list_duels: {e}")
+        embed = create_embed("❌ Ошибка", str(e)[:100], discord.Color.red())
+        await ctx.send(embed=embed)
 # ==================== ВЕБ-СЕРВЕР ====================
 
 try:
