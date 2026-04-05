@@ -1856,6 +1856,100 @@ async def give_card(ctx, member: discord.Member, *, card_name: str):
         embed = create_embed("❌ Ошибка", f"У {member.mention} уже есть эта карта!", discord.Color.red())
         await ctx.send(embed=embed)
 
+@bot.command(name='сброситьбд')
+@commands.has_role(ADMIN_ROLE)
+@in_command_channel()
+async def reset_database(ctx, confirm: str = None):
+    """ПОЛНОСТЬЮ СБРАСЫВАЕТ БАЗУ ДАННЫХ (только для Admin)"""
+    
+    if confirm != "ДА":
+        embed = create_embed(
+            "⚠️ ПОДТВЕРЖДЕНИЕ",
+            f"Эта команда **ПОЛНОСТЬЮ УДАЛИТ ВСЕ ДАННЫЕ**:\n"
+            f"• Балансы всех пользователей\n"
+            f"• Все карточки\n"
+            f"• Все семьи\n"
+            f"• Всю статистику\n"
+            f"• Все подарки и признания\n\n"
+            f"**Чтобы подтвердить, напишите:** `!сброситьбд ДА`\n\n"
+            f"*Это действие НЕЛЬЗЯ отменить!*",
+            discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    embed = create_embed(
+        "⏳ Сброс базы данных",
+        "Начинаю удаление всех данных...",
+        discord.Color.orange()
+    )
+    await ctx.send(embed=embed)
+    
+    try:
+        # Очищаем таблицу users
+        supabase.table('users').delete().neq('user_id', 0).execute()
+        print("[DB] Таблица users очищена")
+        
+        # Очищаем таблицу families
+        supabase.table('families').delete().neq('family_id', 0).execute()
+        print("[DB] Таблица families очищена")
+        
+        # Очищаем таблицу marriage_proposals
+        supabase.table('marriage_proposals').delete().neq('proposal_id', 0).execute()
+        print("[DB] Таблица marriage_proposals очищена")
+        
+        # Очищаем таблицу active_duels
+        supabase.table('active_duels').delete().neq('channel_id', 0).execute()
+        print("[DB] Таблица active_duels очищена")
+        
+        # Очищаем таблицу bieber_catch
+        supabase.table('bieber_catch').delete().neq('user_id', 0).execute()
+        print("[DB] Таблица bieber_catch очищена")
+        
+        # Очищаем таблицу duels
+        supabase.table('duels').delete().neq('user_id', 0).execute()
+        print("[DB] Таблица duels очищена")
+        
+        # Очищаем таблицу logs
+        supabase.table('logs').delete().neq('log_id', 0).execute()
+        print("[DB] Таблица logs очищена")
+        
+        # Очищаем таблицу gifts
+        supabase.table('gifts').delete().neq('gift_id', 0).execute()
+        print("[DB] Таблица gifts очищена")
+        
+        # Очищаем таблицу confessions
+        supabase.table('confessions').delete().neq('confession_id', 0).execute()
+        print("[DB] Таблица confessions очищена")
+        
+        # Сбрасываем глобальные переменные
+        global user_last_card_drop, user_command_history
+        user_last_card_drop = {}
+        user_command_history = {}
+        
+        embed = create_embed(
+            "✅ БАЗА ДАННЫХ ПОЛНОСТЬЮ СБРОШЕНА",
+            f"Все таблицы очищены!\n"
+            f"• Балансы удалены\n"
+            f"• Карточки удалены\n"
+            f"• Семьи удалены\n"
+            f"• Вся статистика удалена\n\n"
+            f"Бот готов к работе с чистого листа!",
+            discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+        log_action(ctx.author.id, "reset_database", "Full database reset")
+        
+    except Exception as e:
+        embed = create_embed(
+            "❌ Ошибка при сбросе",
+            f"Произошла ошибка: {str(e)}",
+            discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        print(f"[ERROR] reset_database: {e}")
+
+        
 # ==================== ВЕБ-СЕРВЕР ====================
 
 try:
