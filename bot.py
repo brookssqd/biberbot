@@ -201,10 +201,12 @@ async def pray(ctx):
             update_user_data(user_id, user_data)
             base_reward *= 2
         
+        # Бонус от артефактов
         bonus_percent = get_active_bonus_percent(user_id, "pray")
         bonus = int(base_reward * bonus_percent / 100)
         total_reward = base_reward + bonus
         
+        # Обновляем баланс
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         
         if response.data:
@@ -220,6 +222,17 @@ async def pray(ctx):
                 'cards': '[]',
                 'completed_combos': '[]'
             }).execute()
+        
+        # Обновляем статистику и проверяем достижения
+        user_data = get_user_data(user_id)
+        stats = user_data.get("stats", {})
+        stats["pray_count"] = stats.get("pray_count", 0) + 1
+        stats["total_earned"] = stats.get("total_earned", 0) + total_reward
+        user_data["stats"] = stats
+        update_user_data(user_id, user_data)
+        
+        # Проверяем достижения
+        new_achievements = check_achievements(user_id)
         
         await try_drop_card(ctx, "молиться")
         await check_combos(ctx)
@@ -241,6 +254,13 @@ async def pray(ctx):
         
         await loading.stop(True, "Молитва принята!")
         await ctx.send(embed=embed)
+        
+        # Уведомление о новых достижениях
+        if new_achievements:
+            from supabase_db import ACHIEVEMENTS_DATA
+            ach_names = ", ".join([ACHIEVEMENTS_DATA[a]["name"] for a in new_achievements])
+            await ctx.send(f"🏆 **НОВОЕ ДОСТИЖЕНИЕ!** {ach_names}")
+        
         log_action(user_id, "pray", f"Work: {work['name']}, Reward: {total_reward}")
         
     except Exception as e:
@@ -268,10 +288,12 @@ async def sermon(ctx):
             update_user_data(user_id, user_data)
             base_reward *= 2
         
+        # Бонус от артефактов
         bonus_percent = get_active_bonus_percent(user_id, "sermon")
         bonus = int(base_reward * bonus_percent / 100)
         total_reward = base_reward + bonus
         
+        # Обновляем баланс
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         
         if response.data:
@@ -287,6 +309,17 @@ async def sermon(ctx):
                 'cards': '[]',
                 'completed_combos': '[]'
             }).execute()
+        
+        # Обновляем статистику и проверяем достижения
+        user_data = get_user_data(user_id)
+        stats = user_data.get("stats", {})
+        stats["sermon_count"] = stats.get("sermon_count", 0) + 1
+        stats["total_earned"] = stats.get("total_earned", 0) + total_reward
+        user_data["stats"] = stats
+        update_user_data(user_id, user_data)
+        
+        # Проверяем достижения
+        new_achievements = check_achievements(user_id)
         
         await try_drop_card(ctx, "проповедь")
         await check_combos(ctx)
@@ -308,6 +341,13 @@ async def sermon(ctx):
         
         await loading.stop(True, "Проповедь завершена!")
         await ctx.send(embed=embed)
+        
+        # Уведомление о новых достижениях
+        if new_achievements:
+            from supabase_db import ACHIEVEMENTS_DATA
+            ach_names = ", ".join([ACHIEVEMENTS_DATA[a]["name"] for a in new_achievements])
+            await ctx.send(f"🏆 **НОВОЕ ДОСТИЖЕНИЕ!** {ach_names}")
+        
         log_action(user_id, "sermon", f"Reward: {total_reward}")
         
     except Exception as e:
@@ -338,12 +378,11 @@ async def ecstasy(ctx):
         # Проверяем защиту от штрафа
         user_data = get_user_data(user_id)
         protected = user_data.get("protect_ecstasy", False)
+        double = user_data.get("next_double", False)
         
         if random.random() <= 0.05:
             reward = 3500
             
-            # Проверяем удвоитель
-            double = user_data.get("next_double", False)
             if double:
                 user_data["next_double"] = False
                 reward *= 2
@@ -352,6 +391,17 @@ async def ecstasy(ctx):
             current = current_response.data[0]['balance'] if current_response.data else 0
             new_balance = current + reward
             supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).execute()
+            
+            # Обновляем статистику и проверяем достижения
+            user_data = get_user_data(user_id)
+            stats = user_data.get("stats", {})
+            stats["ecstasy_wins"] = stats.get("ecstasy_wins", 0) + 1
+            stats["total_earned"] = stats.get("total_earned", 0) + reward
+            user_data["stats"] = stats
+            update_user_data(user_id, user_data)
+            
+            # Проверяем достижения
+            new_achievements = check_achievements(user_id)
             
             outcomes = [
                 "Ты запел «Love Yourself» в акапелле. Голос дрожал, но автотюн спустился с небес.",
@@ -374,6 +424,12 @@ async def ecstasy(ctx):
             
             await loading.stop(True, "Экстаз достигнут!")
             await ctx.send(embed=embed)
+            
+            if new_achievements:
+                from supabase_db import ACHIEVEMENTS_DATA
+                ach_names = ", ".join([ACHIEVEMENTS_DATA[a]["name"] for a in new_achievements])
+                await ctx.send(f"🏆 **НОВОЕ ДОСТИЖЕНИЕ!** {ach_names}")
+            
             log_action(user_id, "ecstasy", f"Success, Reward: {reward}")
         else:
             penalty = 200
@@ -453,6 +509,17 @@ async def repent(ctx):
             new_balance = current + bonus["reward"]
             supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).execute()
             
+            # Обновляем статистику и проверяем достижения
+            user_data = get_user_data(user_id)
+            stats = user_data.get("stats", {})
+            stats["repent_success"] = stats.get("repent_success", 0) + 1
+            stats["total_earned"] = stats.get("total_earned", 0) + bonus["reward"]
+            user_data["stats"] = stats
+            update_user_data(user_id, user_data)
+            
+            # Проверяем достижения
+            new_achievements = check_achievements(user_id)
+            
             await try_drop_card(ctx, "покаяться")
             await check_combos(ctx)
             
@@ -466,6 +533,12 @@ async def repent(ctx):
             
             await loading.stop(True, "Ты прощен!")
             await ctx.send(embed=embed)
+            
+            if new_achievements:
+                from supabase_db import ACHIEVEMENTS_DATA
+                ach_names = ", ".join([ACHIEVEMENTS_DATA[a]["name"] for a in new_achievements])
+                await ctx.send(f"🏆 **НОВОЕ ДОСТИЖЕНИЕ!** {ach_names}")
+            
             log_action(user_id, "repent", f"Success, Reward: {bonus['reward']}")
         else:
             penalties = [
@@ -2132,24 +2205,126 @@ async def stats(ctx, member: discord.Member = None):
 @bot.command(name='помощь')
 @in_command_channel()
 async def help_command(ctx):
-    embed = create_embed("📚 ПОМОЩЬ BIBERBOT", "Вот список всех доступных команд:", discord.Color.blue())
+    embed = create_embed(
+        "📚 ПОМОЩЬ BIBERBOT",
+        "Вот список всех доступных команд:",
+        discord.Color.blue()
+    )
     
-    embed.add_field(name="💰 ЗАРАБОТОК", value="`!молиться` `!проповедь` `!экстаз` `!покаяться`", inline=False)
-    embed.add_field(name="🎴 КОЛЛЕКЦИОНИРОВАНИЕ", value="`!коллекция` `!картакд` `!шансыкарт`", inline=False)
-    embed.add_field(name="🎉 РАЗВЛЕЧЕНИЯ", value="`!поцелуй` `!обнять` `!ударить` `!угостить` `!любовь` `!комплимент`", inline=False)
-    embed.add_field(name="🎁 ПОДАРКИ", value="`!подарок` `!моиподарки` `!топподарков`", inline=False)
-    embed.add_field(name="👪 СЕМЬЯ", value="`!предложить` `!принять` `!отказаться` `!моясемья` `!добавитьребенка` `!улучшитьсемью` `!развестись` `!дети` `!исключитьребенка` `!выйти`", inline=False)
-    embed.add_field(name="🛒 МАГАЗИН", value="`!магазин` `!купить` `!артефакты` `!окупаемость`", inline=False)
-    embed.add_field(name="⚔️ ДУЭЛИ", value="`!дуэль` `!принятьдуэль` `!бой` `!отменитьдуэль`", inline=False)
-    embed.add_field(name="🎮 ИГРЫ", value="`!поймать` `!передать`", inline=False)
-    embed.add_field(name="ℹ️ ИНФОРМАЦИЯ", value="`!баланс` `!топ` `!фанаты` `!статистика`", inline=False)
-    embed.add_field(name="💌 ПРИЗНАНИЯ", value="`!признание текст`", inline=False)
+    # 💰 ЗАРАБОТОК
+    embed.add_field(
+        name="💰 ЗАРАБОТОК",
+        value="`!молиться` - заработать бибсы\n"
+              "`!проповедь` - заработать бибсы\n"
+              "`!экстаз` - рискнуть (5% успеха)\n"
+              "`!покаяться` - шанс получить бибсы",
+        inline=False
+    )
     
-    if ctx.author.guild_permissions.administrator or commands.has_role(ADMIN_ROLE):
+    # 🎴 КОЛЛЕКЦИОНИРОВАНИЕ
+    embed.add_field(
+        name="🎴 КОЛЛЕКЦИОНИРОВАНИЕ",
+        value="`!коллекция` - показать коллекцию карт\n"
+              "`!картакд` - показать кулдаун карт\n"
+              "`!шансыкарт` - шансы выпадения карт",
+        inline=False
+    )
+    
+    # 🎉 РАЗВЛЕЧЕНИЯ
+    embed.add_field(
+        name="🎉 РАЗВЛЕЧЕНИЯ",
+        value="`!поцелуй @участник` - поцеловать\n"
+              "`!обнять @участник` - обнять\n"
+              "`!ударить @участник` - ударить\n"
+              "`!угостить @участник` - угостить\n"
+              "`!любовь @участник` - заняться любовью\n"
+              "`!комплимент [@участник]` - получить комплимент",
+        inline=False
+    )
+    
+    # 👪 СЕМЬЯ
+    embed.add_field(
+        name="👪 СЕМЬЯ",
+        value="`!предложить @участник текст` - сделать предложение\n"
+              "`!принять ID` - принять предложение\n"
+              "`!отказаться ID` - отказаться\n"
+              "`!моясемья` - информация о семье\n"
+              "`!добавитьребенка @участник имя тип` - добавить ребёнка (сын/дочь)\n"
+              "`!исключитьребенка @участник` - исключить ребёнка\n"
+              "`!улучшитьсемью` - улучшить семью\n"
+              "`!дети` - список детей\n"
+              "`!развестись` - развод (только с подтверждением)\n"
+              "`!выйти` - выйти из семьи (для детей)",
+        inline=False
+    )
+    
+    # ⚔️ ДУЭЛИ
+    embed.add_field(
+        name="⚔️ ДУЭЛИ",
+        value="`!дуэль @участник 50-150` - вызвать на дуэль\n"
+              "`!принятьдуэль` - принять дуэль\n"
+              "`!бой` - начать бой\n"
+              "`!отменитьдуэль` - отменить дуэль",
+        inline=False
+    )
+    
+    # 🎁 ПОДАРКИ
+    embed.add_field(
+        name="🎁 ПОДАРКИ",
+        value="`!подарок @участник` - отправить подарок\n"
+              "`!моиподарки` - посмотреть подарки\n"
+              "`!топподарков` - топ получателей подарков",
+        inline=False
+    )
+    
+    # 🛒 МАГАЗИН И АРТЕФАКТЫ
+    embed.add_field(
+        name="🛒 МАГАЗИН И АРТЕФАКТЫ",
+        value="`!магазин` - список товаров\n"
+              "`!купить название` - купить артефакт/расходник\n"
+              "`!артефакты` - ваши активные артефакты\n"
+              "`!окупаемость название` - рассчитать окупаемость артефакта",
+        inline=False
+    )
+    
+    # 🏆 ДОСТИЖЕНИЯ
+    embed.add_field(
+        name="🏆 ДОСТИЖЕНИЯ",
+        value="`!ачивки [@участник]` - посмотреть достижения",
+        inline=False
+    )
+    
+    # 🎮 ИГРЫ И ПРОЧЕЕ
+    embed.add_field(
+        name="🎮 ИГРЫ И ПРОЧЕЕ",
+        value="`!поймать` - поймать Бибера (появляется случайно)\n"
+              "`!передать @участник сумма` - передать бибсы\n"
+              "`!признание текст` - анонимное признание",
+        inline=False
+    )
+    
+    # ℹ️ ИНФОРМАЦИЯ
+    embed.add_field(
+        name="ℹ️ ИНФОРМАЦИЯ",
+        value="`!баланс [@участник]` - проверить баланс\n"
+              "`!топ` - топ по балансу\n"
+              "`!фанаты` - топ ловцов Бибера\n"
+              "`!статистика [@участник]` - полная статистика\n"
+              "`!помощь` - это сообщение",
+        inline=False
+    )
+    
+    # 👑 АДМИН-КОМАНДЫ
+    if ctx.author.guild_permissions.administrator or discord.utils.get(ctx.author.roles, name=ADMIN_ROLE):
         embed.add_field(
             name="👑 АДМИН-КОМАНДЫ",
-            value="`!выдать` `!забрать` `!сброситькулдаун` `!датькарту`\n"
-                  "`!сброситьбд ДА` `!админотмена` `!дуэлисписок`",
+            value="`!выдать @участник сумма` - выдать бибсы\n"
+                  "`!забрать @участник сумма` - забрать бибсы\n"
+                  "`!сброситькулдаун [@участник]` - сбросить кулдаун\n"
+                  "`!датькарту @участник название` - выдать карту\n"
+                  "`!сброситьбд ДА` - ПОЛНОСТЬЮ СБРОСИТЬ БД\n"
+                  "`!админотмена [#канал]` - принудительно отменить дуэль\n"
+                  "`!дуэлисписок` - список активных дуэлей",
             inline=False
         )
     

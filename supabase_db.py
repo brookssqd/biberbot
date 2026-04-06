@@ -355,6 +355,164 @@ def get_active_bonus_percent(user_id: int, command: str) -> int:
         print(f"[ERROR] get_active_bonus_percent: {e}")
         return 0
 
+# ==================== СИСТЕМА АЧИВОК ====================
+
+ACHIEVEMENTS_DATA = {
+    # МОЛИТВЫ
+    "pray_10": {"name": "🙏 Первые шаги", "desc": "Совершить 10 молитв", "reward": 100},
+    "pray_100": {"name": "🙌 Истинный верующий", "desc": "Совершить 100 молитв", "reward": 500, "permanent_bonus": {"command": "pray", "bonus": 2}},
+    "pray_1000": {"name": "👼 Святой покровитель", "desc": "Совершить 1000 молитв", "reward": 2000, "permanent_bonus": {"command": "pray", "bonus": 5}},
+    
+    # ПРОПОВЕДИ
+    "sermon_10": {"name": "📖 Первая проповедь", "desc": "Провести 10 проповедей", "reward": 100},
+    "sermon_100": {"name": "✝️ Глашатай веры", "desc": "Провести 100 проповедей", "reward": 500, "permanent_bonus": {"command": "sermon", "bonus": 2}},
+    "sermon_1000": {"name": "📜 Пророк", "desc": "Провести 1000 проповедей", "reward": 2000, "permanent_bonus": {"command": "sermon", "bonus": 5}},
+    
+    # КАРТЫ
+    "cards_5": {"name": "🎴 Начинающий коллекционер", "desc": "Собрать 5 карт", "reward": 200},
+    "cards_15": {"name": "🎴 Знаток Бибера", "desc": "Собрать 15 карт", "reward": 500, "permanent_bonus": {"command": "card", "bonus": 3}},
+    "cards_all": {"name": "🎴 Легендарный коллекционер", "desc": "Собрать ВСЕ карты", "reward": 5000, "permanent_bonus": {"command": "card", "bonus": 10}},
+    
+    # БАЛАНС
+    "balance_1000": {"name": "💰 Первый капитал", "desc": "Накопить 1000 бибсов", "reward": 200},
+    "balance_10000": {"name": "💎 Бибер-миллионер", "desc": "Накопить 10000 бибсов", "reward": 1000, "permanent_bonus": {"command": "all", "bonus": 3}},
+    "balance_100000": {"name": "👑 Король фанатов", "desc": "Накопить 100000 бибсов", "reward": 5000, "permanent_bonus": {"command": "all", "bonus": 5}},
+    
+    # ЛОВЛЯ БИБЕРА
+    "catch_5": {"name": "🎣 Первая добыча", "desc": "Поймать Бибера 5 раз", "reward": 300},
+    "catch_25": {"name": "🏃 Охотник за Бибером", "desc": "Поймать Бибера 25 раз", "reward": 1000, "permanent_bonus": {"command": "catch", "bonus": 5}},
+    "catch_100": {"name": "⚡ Легендарный охотник", "desc": "Поймать Бибера 100 раз", "reward": 3000, "permanent_bonus": {"command": "catch", "bonus": 10}},
+    
+    # ДУЭЛИ
+    "duel_5": {"name": "⚔️ Первая победа", "desc": "Выиграть 5 дуэлей", "reward": 500},
+    "duel_25": {"name": "🏆 Непобедимый", "desc": "Выиграть 25 дуэлей", "reward": 1500, "permanent_bonus": {"command": "duel", "bonus": 5}},
+    "duel_100": {"name": "👊 Легенда дуэлей", "desc": "Выиграть 100 дуэлей", "reward": 5000, "permanent_bonus": {"command": "duel", "bonus": 10}},
+    
+    # СЕМЬЯ
+    "family_create": {"name": "💍 В браке", "desc": "Создать семью", "reward": 1000},
+    "family_level_3": {"name": "🏠 Крепкая семья", "desc": "Улучшить семью до 3 уровня", "reward": 2000, "permanent_bonus": {"command": "family", "bonus": 5}},
+    "family_level_6": {"name": "👑 Королевская семья", "desc": "Улучшить семью до 6 уровня", "reward": 5000, "permanent_bonus": {"command": "family", "bonus": 10}},
+    
+    # КОМБИНАЦИИ
+    "combo_1": {"name": "🤫 Знаток секретов", "desc": "Найти первую секретную комбинацию", "reward": 500},
+    "combo_5": {"name": "🧙‍♂️ Мастер комбинаций", "desc": "Найти 5 секретных комбинаций", "reward": 2000, "permanent_bonus": {"command": "combo", "bonus": 10}},
+    "combo_all": {"name": "🧙‍♂️ Архимаг", "desc": "Найти ВСЕ секретные комбинации", "reward": 5000, "permanent_bonus": {"command": "combo", "bonus": 20}},
+}
+
+def check_achievements(user_id: int) -> list:
+    """Проверить и выдать новые достижения"""
+    from bot_data import COLLECTIBLE_CARDS
+    
+    user_data = get_user_data(user_id)
+    achievements = user_data.get("achievements", [])
+    stats = user_data.get("stats", {})
+    
+    new_achievements = []
+    
+    # Собираем статистику
+    pray_count = stats.get("pray_count", 0)
+    sermon_count = stats.get("sermon_count", 0)
+    cards_count = len(user_data.get("cards", []))
+    balance = user_data.get("balance", 0)
+    catch_count = get_bieber_catch_stats(user_id)["catches"]
+    duel_wins = stats.get("duel_wins", 0)
+    family = get_family_by_member(user_id)
+    combos_count = len(user_data.get("completed_combos", []))
+    
+    # Проверяем каждое достижение
+    if "pray_10" not in achievements and pray_count >= 10:
+        new_achievements.append("pray_10")
+    if "pray_100" not in achievements and pray_count >= 100:
+        new_achievements.append("pray_100")
+    if "pray_1000" not in achievements and pray_count >= 1000:
+        new_achievements.append("pray_1000")
+    
+    if "sermon_10" not in achievements and sermon_count >= 10:
+        new_achievements.append("sermon_10")
+    if "sermon_100" not in achievements and sermon_count >= 100:
+        new_achievements.append("sermon_100")
+    if "sermon_1000" not in achievements and sermon_count >= 1000:
+        new_achievements.append("sermon_1000")
+    
+    if "cards_5" not in achievements and cards_count >= 5:
+        new_achievements.append("cards_5")
+    if "cards_15" not in achievements and cards_count >= 15:
+        new_achievements.append("cards_15")
+    if "cards_all" not in achievements and cards_count >= len(COLLECTIBLE_CARDS):
+        new_achievements.append("cards_all")
+    
+    if "balance_1000" not in achievements and balance >= 1000:
+        new_achievements.append("balance_1000")
+    if "balance_10000" not in achievements and balance >= 10000:
+        new_achievements.append("balance_10000")
+    if "balance_100000" not in achievements and balance >= 100000:
+        new_achievements.append("balance_100000")
+    
+    if "catch_5" not in achievements and catch_count >= 5:
+        new_achievements.append("catch_5")
+    if "catch_25" not in achievements and catch_count >= 25:
+        new_achievements.append("catch_25")
+    if "catch_100" not in achievements and catch_count >= 100:
+        new_achievements.append("catch_100")
+    
+    if "duel_5" not in achievements and duel_wins >= 5:
+        new_achievements.append("duel_5")
+    if "duel_25" not in achievements and duel_wins >= 25:
+        new_achievements.append("duel_25")
+    if "duel_100" not in achievements and duel_wins >= 100:
+        new_achievements.append("duel_100")
+    
+    if "family_create" not in achievements and family:
+        new_achievements.append("family_create")
+    if "family_level_3" not in achievements and family and family.get("level", 0) >= 3:
+        new_achievements.append("family_level_3")
+    if "family_level_6" not in achievements and family and family.get("level", 0) >= 6:
+        new_achievements.append("family_level_6")
+    
+    if "combo_1" not in achievements and combos_count >= 1:
+        new_achievements.append("combo_1")
+    if "combo_5" not in achievements and combos_count >= 5:
+        new_achievements.append("combo_5")
+    if "combo_all" not in achievements and combos_count >= len(SECRET_COMBOS):
+        new_achievements.append("combo_all")
+    
+    # Выдаём награды
+    if new_achievements:
+        for ach_id in new_achievements:
+            ach_data = ACHIEVEMENTS_DATA[ach_id]
+            
+            # Мгновенная награда
+            if "reward" in ach_data:
+                add_balance(user_id, ach_data["reward"])
+            
+            # Постоянный бонус
+            if "permanent_bonus" in ach_data:
+                bonus = ach_data["permanent_bonus"]
+                user_data = get_user_data(user_id)
+                if "achievement_bonuses" not in user_data:
+                    user_data["achievement_bonuses"] = {}
+                user_data["achievement_bonuses"][ach_id] = bonus
+                update_user_data(user_id, user_data)
+        
+        # Сохраняем достижения
+        user_data = get_user_data(user_id)
+        user_data["achievements"] = achievements + new_achievements
+        update_user_data(user_id, user_data)
+    
+    return new_achievements
+
+def get_achievement_bonus(user_id: int, command: str) -> int:
+    """Получить бонус от достижений"""
+    user_data = get_user_data(user_id)
+    bonuses = user_data.get("achievement_bonuses", {})
+    
+    total = 0
+    for ach_id, bonus in bonuses.items():
+        if bonus.get("command") == command or bonus.get("command") == "all":
+            total += bonus.get("bonus", 0)
+    
+    return min(total, 100)
+
 # ==================== ФУНКЦИИ ДЛЯ РАСХОДУЕМЫХ ПРЕДМЕТОВ ====================
 
 def add_consumable(user_id: int, item_id: str, quantity: int = 1) -> bool:
