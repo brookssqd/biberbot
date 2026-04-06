@@ -401,6 +401,8 @@ def check_achievements(user_id: int) -> list:
     family = get_family_by_member(user_id)
     combos_count = len(user_data.get("completed_combos", []))
     
+    print(f"[ACHIEVEMENTS] Проверка для {user_id}: молитв={pray_count}, карт={cards_count}, баланс={balance}")
+    
     # Проверяем каждое достижение
     if "pray_10" not in achievements and pray_count >= 10:
         new_achievements.append("pray_10")
@@ -458,6 +460,8 @@ def check_achievements(user_id: int) -> list:
     if "combo_all" not in achievements and combos_count >= SECRET_COMBOS_COUNT:
         new_achievements.append("combo_all")
     
+    print(f"[ACHIEVEMENTS] Новые достижения для {user_id}: {new_achievements}")
+    
     # Выдаём награды
     if new_achievements:
         for ach_id in new_achievements:
@@ -466,15 +470,18 @@ def check_achievements(user_id: int) -> list:
             # Мгновенная награда
             if "reward" in ach_data:
                 add_balance(user_id, ach_data["reward"])
+                print(f"[ACHIEVEMENTS] Выдана награда {ach_data['reward']} бибсов за {ach_id}")
             
             # Постоянный бонус
             if "permanent_bonus" in ach_data:
                 bonus = ach_data["permanent_bonus"]
+                # Получаем свежие данные
                 user_data = get_user_data(user_id)
                 if "achievement_bonuses" not in user_data:
                     user_data["achievement_bonuses"] = {}
                 user_data["achievement_bonuses"][ach_id] = bonus
                 update_user_data(user_id, user_data)
+                print(f"[ACHIEVEMENTS] Выдан постоянный бонус +{bonus['bonus']}% к {bonus['command']}")
         
         # Сохраняем достижения
         user_data = get_user_data(user_id)
