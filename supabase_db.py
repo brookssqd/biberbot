@@ -18,7 +18,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # ==================== ФУНКЦИИ ДЛЯ ЛОГИРОВАНИЯ ====================
 
 def log_action(user_id: int, command: str, details: str = ""):
-    """Логирование действий"""
     try:
         supabase.table('logs').insert({
             'user_id': user_id,
@@ -32,7 +31,6 @@ def log_action(user_id: int, command: str, details: str = ""):
 # ==================== ФУНКЦИИ РАБОТЫ С БАЛАНСОМ ====================
 
 def add_balance(user_id: int, amount: int) -> int:
-    """Добавить/убавить баланс"""
     try:
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         
@@ -57,7 +55,6 @@ def add_balance(user_id: int, amount: int) -> int:
         return 0
 
 def get_balance(user_id: int) -> int:
-    """Получить баланс"""
     try:
         response = supabase.table('users').select('balance').eq('user_id', user_id).execute()
         if response.data:
@@ -68,7 +65,6 @@ def get_balance(user_id: int) -> int:
         return 0
 
 def set_balance(user_id: int, amount: int) -> int:
-    """Установить точный баланс"""
     try:
         supabase.table('users').upsert({
             'user_id': user_id,
@@ -85,7 +81,6 @@ def set_balance(user_id: int, amount: int) -> int:
 # ==================== ФУНКЦИИ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ====================
 
 def get_user_data(user_id: int) -> dict:
-    """Получить все данные пользователя"""
     try:
         response = supabase.table('users').select('*').eq('user_id', user_id).execute()
         
@@ -109,7 +104,11 @@ def get_user_data(user_id: int) -> dict:
                 "personal_role": None,
                 "personal_tag": None,
                 "last_proposal": None,
-                "last_divorce": None
+                "last_divorce": None,
+                "last_family_join": None,
+                "consumables": {},
+                "next_double": False,
+                "protect_ecstasy": False
             }
         
         data = response.data[0]
@@ -117,6 +116,7 @@ def get_user_data(user_id: int) -> dict:
         artifacts = json.loads(data.get('artifacts', '{}'))
         cards = json.loads(data.get('cards', '[]'))
         completed_combos = json.loads(data.get('completed_combos', '[]'))
+        consumables = json.loads(data.get('consumables', '{}'))
         
         return {
             "balance": data.get('balance', 0),
@@ -130,14 +130,17 @@ def get_user_data(user_id: int) -> dict:
             "personal_role": data.get('personal_role'),
             "personal_tag": data.get('personal_tag'),
             "last_proposal": data.get('last_proposal'),
-            "last_divorce": data.get('last_divorce')
+            "last_divorce": data.get('last_divorce'),
+            "last_family_join": data.get('last_family_join'),
+            "consumables": consumables,
+            "next_double": data.get('next_double', False),
+            "protect_ecstasy": data.get('protect_ecstasy', False)
         }
     except Exception as e:
         print(f"[ERROR] get_user_data: {e}")
         return {"balance": 0, "artifacts": {}, "cards": [], "completed_combos": []}
 
 def update_user_data(user_id: int, data: dict):
-    """Обновить данные пользователя"""
     try:
         supabase.table('users').update({
             'balance': data.get('balance', 0),
@@ -151,7 +154,11 @@ def update_user_data(user_id: int, data: dict):
             'personal_role': data.get('personal_role'),
             'personal_tag': data.get('personal_tag'),
             'last_proposal': data.get('last_proposal'),
-            'last_divorce': data.get('last_divorce')
+            'last_divorce': data.get('last_divorce'),
+            'last_family_join': data.get('last_family_join'),
+            'consumables': json.dumps(data.get('consumables', {})),
+            'next_double': data.get('next_double', False),
+            'protect_ecstasy': data.get('protect_ecstasy', False)
         }).eq('user_id', user_id).execute()
     except Exception as e:
         print(f"[ERROR] update_user_data: {e}")
@@ -159,7 +166,6 @@ def update_user_data(user_id: int, data: dict):
 # ==================== ФУНКЦИИ ДЛЯ КАРТОЧЕК ====================
 
 def add_card_to_user(user_id: int, card_id: str) -> bool:
-    """Добавить карточку пользователю"""
     try:
         response = supabase.table('users').select('cards').eq('user_id', user_id).execute()
         cards = []
@@ -179,7 +185,6 @@ def add_card_to_user(user_id: int, card_id: str) -> bool:
         return False
 
 def get_user_cards_collection(user_id: int) -> dict:
-    """Получить коллекцию карт пользователя"""
     from bot_data import COLLECTIBLE_CARDS
     
     try:
@@ -212,7 +217,6 @@ def get_user_cards_collection(user_id: int) -> dict:
 # ==================== ФУНКЦИИ ДЛЯ КОМБИНАЦИЙ ====================
 
 def check_secret_combo(user_id: int, command_sequence: list, SECRET_COMBOS: dict) -> Optional[Tuple[str, dict]]:
-    """Проверить секретную комбинацию"""
     combo_str = "→".join(command_sequence)
     
     if combo_str in SECRET_COMBOS:
@@ -230,7 +234,6 @@ def check_secret_combo(user_id: int, command_sequence: list, SECRET_COMBOS: dict
     return None
 
 def complete_combo(user_id: int, combo_str: str):
-    """Отметить комбинацию как выполненную"""
     try:
         response = supabase.table('users').select('completed_combos').eq('user_id', user_id).execute()
         completed = []
@@ -244,11 +247,198 @@ def complete_combo(user_id: int, combo_str: str):
     except Exception as e:
         print(f"[ERROR] complete_combo: {e}")
 
+# ==================== НОВАЯ СИСТЕМА АРТЕФАКТОВ ====================
 
-# ==================== ФУНКЦИИ ДЛЯ СЕМЬИ ====================
+def add_temporary_artifact(user_id: int, artifact_id: str, duration_days: int) -> bool:
+    try:
+        from bot_data import SHOP_ITEMS
+        
+        if artifact_id not in SHOP_ITEMS:
+            return False
+        
+        user_data = get_user_data(user_id)
+        artifacts = user_data.get("artifacts", {})
+        
+        expires_at = (datetime.now() + timedelta(days=duration_days)).isoformat()
+        
+        artifacts[artifact_id] = {
+            "expires_at": expires_at,
+            "type": "temporary",
+            "duration_days": duration_days
+        }
+        
+        user_data["artifacts"] = artifacts
+        update_user_data(user_id, user_data)
+        
+        log_action(user_id, "add_temporary_artifact", f"{artifact_id} expires at {expires_at}")
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] add_temporary_artifact: {e}")
+        return False
+
+def add_permanent_artifact(user_id: int, artifact_id: str) -> bool:
+    try:
+        from bot_data import SHOP_ITEMS
+        
+        if artifact_id not in SHOP_ITEMS:
+            return False
+        
+        user_data = get_user_data(user_id)
+        artifacts = user_data.get("artifacts", {})
+        
+        artifacts[artifact_id] = {
+            "type": "permanent"
+        }
+        
+        user_data["artifacts"] = artifacts
+        update_user_data(user_id, user_data)
+        
+        log_action(user_id, "add_permanent_artifact", artifact_id)
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] add_permanent_artifact: {e}")
+        return False
+
+def check_expired_artifacts(user_id: int) -> dict:
+    try:
+        user_data = get_user_data(user_id)
+        artifacts = user_data.get("artifacts", {})
+        
+        expired = []
+        active = {}
+        
+        for art_id, art_data in artifacts.items():
+            if art_data.get("type") == "temporary" and "expires_at" in art_data:
+                expires_at = datetime.fromisoformat(art_data["expires_at"])
+                if expires_at < datetime.now():
+                    expired.append(art_id)
+                    continue
+            active[art_id] = art_data
+        
+        if expired:
+            user_data["artifacts"] = active
+            update_user_data(user_id, user_data)
+            print(f"[ARTIFACT] У пользователя {user_id} истекли артефакты: {expired}")
+        
+        return {"active": active, "expired": expired}
+        
+    except Exception as e:
+        print(f"[ERROR] check_expired_artifacts: {e}")
+        return {"active": {}, "expired": []}
+
+def get_active_bonus_percent(user_id: int, command: str) -> int:
+    try:
+        from bot_data import SHOP_ITEMS
+        
+        check_expired_artifacts(user_id)
+        
+        user_data = get_user_data(user_id)
+        artifacts = user_data.get("artifacts", {})
+        
+        total_bonus = 0
+        
+        for art_id, art_data in artifacts.items():
+            if art_id not in SHOP_ITEMS:
+                continue
+            
+            item = SHOP_ITEMS[art_id]
+            effect = item.get("effect", {})
+            
+            if effect.get("command") == command or effect.get("command") == "all":
+                total_bonus += effect.get("bonus", 0)
+        
+        return min(total_bonus, 300)
+        
+    except Exception as e:
+        print(f"[ERROR] get_active_bonus_percent: {e}")
+        return 0
+
+# ==================== ФУНКЦИИ ДЛЯ РАСХОДУЕМЫХ ПРЕДМЕТОВ ====================
+
+def add_consumable(user_id: int, item_id: str, quantity: int = 1) -> bool:
+    try:
+        user_data = get_user_data(user_id)
+        consumables = user_data.get("consumables", {})
+        
+        if item_id in consumables:
+            consumables[item_id] += quantity
+        else:
+            consumables[item_id] = quantity
+        
+        user_data["consumables"] = consumables
+        update_user_data(user_id, user_data)
+        
+        log_action(user_id, "add_consumable", f"{item_id} x{quantity}")
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] add_consumable: {e}")
+        return False
+
+def use_consumable(user_id: int, item_id: str) -> bool:
+    try:
+        user_data = get_user_data(user_id)
+        consumables = user_data.get("consumables", {})
+        
+        if consumables.get(item_id, 0) <= 0:
+            return False
+        
+        consumables[item_id] -= 1
+        
+        if consumables[item_id] <= 0:
+            del consumables[item_id]
+        
+        user_data["consumables"] = consumables
+        update_user_data(user_id, user_data)
+        
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] use_consumable: {e}")
+        return False
+
+def get_consumable_count(user_id: int, item_id: str) -> int:
+    try:
+        user_data = get_user_data(user_id)
+        consumables = user_data.get("consumables", {})
+        return consumables.get(item_id, 0)
+    except Exception as e:
+        print(f"[ERROR] get_consumable_count: {e}")
+        return 0
+
+def get_daily_consumable_purchases(user_id: int, item_id: str) -> int:
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        response = supabase.table('consumable_purchases') \
+            .select('*') \
+            .eq('user_id', user_id) \
+            .eq('item_id', item_id) \
+            .eq('purchase_date', today) \
+            .execute()
+        
+        return len(response.data)
+    except Exception as e:
+        print(f"[ERROR] get_daily_consumable_purchases: {e}")
+        return 0
+
+def add_consumable_purchase(user_id: int, item_id: str):
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        supabase.table('consumable_purchases').insert({
+            'user_id': user_id,
+            'item_id': item_id,
+            'purchase_date': today
+        }).execute()
+    except Exception as e:
+        print(f"[ERROR] add_consumable_purchase: {e}")
+
+# ==================== СЕМЕЙНЫЕ ФУНКЦИИ (ОБНОВЛЁННЫЕ) ====================
 
 def get_family_by_member(user_id: int) -> Optional[dict]:
-    """Получить семью по участнику"""
     try:
         families = supabase.table('families').select('*').execute()
         
@@ -282,13 +472,14 @@ def get_family_by_member(user_id: int) -> Optional[dict]:
         return None
 
 def create_family(spouse1_id: int, spouse2_id: int, family_name: str) -> int:
-    """Создать новую семью"""
     try:
         result = supabase.table('families').insert({
             'spouse1_id': spouse1_id,
             'spouse2_id': spouse2_id,
             'family_name': family_name,
-            'children': '[]'
+            'children': '[]',
+            'level': 1,
+            'created_at': datetime.now().isoformat()
         }).execute()
         return result.data[0]['family_id']
     except Exception as e:
@@ -296,7 +487,6 @@ def create_family(spouse1_id: int, spouse2_id: int, family_name: str) -> int:
         return 0
 
 def update_family(family_id: int, data: dict):
-    """Обновить данные семьи"""
     try:
         supabase.table('families').update({
             'spouse1_id': data['spouse1_id'],
@@ -309,7 +499,6 @@ def update_family(family_id: int, data: dict):
         print(f"[ERROR] update_family: {e}")
 
 def get_family(family_id: int) -> Optional[dict]:
-    """Получить семью по ID"""
     try:
         response = supabase.table('families').select('*').eq('family_id', family_id).execute()
         if not response.data:
@@ -329,7 +518,6 @@ def get_family(family_id: int) -> Optional[dict]:
         return None
 
 def add_child_to_family(family_id: int, child_id: int, child_name: str, child_type: str) -> bool:
-    """Добавить ребенка в семью (максимум 5 детей)"""
     try:
         family = get_family(family_id)
         if not family:
@@ -356,7 +544,6 @@ def add_child_to_family(family_id: int, child_id: int, child_name: str, child_ty
         return False
 
 def remove_child_from_family(family_id: int, child_id: int) -> bool:
-    """Удалить ребенка из семьи"""
     try:
         family = get_family(family_id)
         if not family:
@@ -373,22 +560,84 @@ def remove_child_from_family(family_id: int, child_id: int) -> bool:
         print(f"[ERROR] remove_child_from_family: {e}")
         return False
 
-def upgrade_family(family_id: int, FAMILY_UPGRADE_COSTS: dict) -> bool:
-    """Улучшить уровень семьи"""
+def get_family_upgrade_cooldown(family_id: int) -> Optional[datetime]:
+    try:
+        response = supabase.table('families').select('last_upgrade_at').eq('family_id', family_id).execute()
+        if response.data and response.data[0].get('last_upgrade_at'):
+            return datetime.fromisoformat(response.data[0]['last_upgrade_at'])
+        return None
+    except Exception as e:
+        print(f"[ERROR] get_family_upgrade_cooldown: {e}")
+        return None
+
+def set_family_upgrade_time(family_id: int):
+    try:
+        supabase.table('families').update({
+            'last_upgrade_at': datetime.now().isoformat()
+        }).eq('family_id', family_id).execute()
+    except Exception as e:
+        print(f"[ERROR] set_family_upgrade_time: {e}")
+
+def get_family_age_days(family_id: int) -> int:
+    try:
+        response = supabase.table('families').select('created_at').eq('family_id', family_id).execute()
+        if response.data:
+            created_at = datetime.fromisoformat(response.data[0]['created_at'])
+            return (datetime.now() - created_at).days
+        return 0
+    except Exception as e:
+        print(f"[ERROR] get_family_age_days: {e}")
+        return 0
+
+def can_upgrade_family(family_id: int, FAMILY_UPGRADE_REQUIREMENTS: dict, FAMILY_MAX_LEVEL: int, FAMILY_UPGRADE_COOLDOWN: int) -> tuple:
     try:
         family = get_family(family_id)
-        if not family or family['level'] >= 5:
-            return False
+        if not family:
+            return (False, "Семья не найдена!")
         
-        cost = FAMILY_UPGRADE_COSTS.get(family['level'] + 1, 50000)
-        spouse1_balance = get_balance(family['spouse1_id'])
-        spouse2_balance = get_balance(family['spouse2_id'])
-        total_balance = spouse1_balance + spouse2_balance
+        if family['level'] >= FAMILY_MAX_LEVEL:
+            return (False, f"Семья уже достигла максимального {FAMILY_MAX_LEVEL} уровня!")
         
-        if total_balance < cost:
-            return False
+        next_level = family['level'] + 1
+        
+        last_upgrade = get_family_upgrade_cooldown(family_id)
+        if last_upgrade:
+            time_since = (datetime.now() - last_upgrade).total_seconds()
+            if time_since < FAMILY_UPGRADE_COOLDOWN:
+                remaining_hours = int((FAMILY_UPGRADE_COOLDOWN - time_since) // 3600)
+                remaining_minutes = int(((FAMILY_UPGRADE_COOLDOWN - time_since) % 3600) // 60)
+                return (False, f"Семью можно улучшать только раз в 24 часа! Осталось: {remaining_hours}ч {remaining_minutes}м")
+        
+        req = FAMILY_UPGRADE_REQUIREMENTS.get(next_level, {})
+        
+        min_children = req.get("min_children", 0)
+        if len(family['children']) < min_children:
+            return (False, f"Для улучшения до {next_level} уровня нужно {min_children} детей! Сейчас: {len(family['children'])}")
+        
+        min_age_days = req.get("min_family_age_days", 0)
+        family_age = get_family_age_days(family_id)
+        if family_age < min_age_days:
+            return (False, f"Семье нужно существовать {min_age_days} дней для улучшения до {next_level} уровня! Сейчас: {family_age} дней")
+        
+        return (True, f"Можно улучшить до {next_level} уровня")
+        
+    except Exception as e:
+        print(f"[ERROR] can_upgrade_family: {e}")
+        return (False, "Ошибка проверки")
+
+def upgrade_family_with_checks(family_id: int, FAMILY_UPGRADE_COSTS: dict, FAMILY_UPGRADE_REQUIREMENTS: dict, FAMILY_MAX_LEVEL: int, FAMILY_UPGRADE_COOLDOWN: int) -> tuple:
+    try:
+        can, message = can_upgrade_family(family_id, FAMILY_UPGRADE_REQUIREMENTS, FAMILY_MAX_LEVEL, FAMILY_UPGRADE_COOLDOWN)
+        if not can:
+            return (False, message)
+        
+        family = get_family(family_id)
+        cost = FAMILY_UPGRADE_COSTS.get(family['level'], 5000)
         
         half_cost = cost // 2
+        spouse1_balance = get_balance(family['spouse1_id'])
+        spouse2_balance = get_balance(family['spouse2_id'])
+        
         if spouse1_balance >= half_cost and spouse2_balance >= half_cost:
             add_balance(family['spouse1_id'], -half_cost)
             add_balance(family['spouse2_id'], -half_cost)
@@ -402,15 +651,69 @@ def upgrade_family(family_id: int, FAMILY_UPGRADE_COSTS: dict) -> bool:
         
         family['level'] += 1
         update_family(family_id, family)
-        return True
+        set_family_upgrade_time(family_id)
+        
+        return (True, f"Семья улучшена до {family['level']} уровня!")
+        
     except Exception as e:
-        print(f"[ERROR] upgrade_family: {e}")
-        return False
+        print(f"[ERROR] upgrade_family_with_checks: {e}")
+        return (False, "Ошибка при улучшении")
+
+def can_join_family(user_id: int, FAMILY_JOIN_COOLDOWN: int) -> tuple:
+    try:
+        user_data = get_user_data(user_id)
+        last_join = user_data.get('last_family_join')
+        
+        if last_join:
+            last_join_time = datetime.fromisoformat(last_join)
+            time_since = (datetime.now() - last_join_time).total_seconds()
+            if time_since < FAMILY_JOIN_COOLDOWN:
+                remaining_hours = int((FAMILY_JOIN_COOLDOWN - time_since) // 3600)
+                return (False, f"Вы сможете вступить в новую семью через {remaining_hours} часов")
+        
+        return (True, "Можно вступать")
+        
+    except Exception as e:
+        print(f"[ERROR] can_join_family: {e}")
+        return (True, "Можно вступать")
+
+def set_user_join_time(user_id: int):
+    try:
+        user_data = get_user_data(user_id)
+        user_data['last_family_join'] = datetime.now().isoformat()
+        update_user_data(user_id, user_data)
+    except Exception as e:
+        print(f"[ERROR] set_user_join_time: {e}")
+
+def can_divorce(user_id: int, FAMILY_DIVORCE_COOLDOWN: int) -> tuple:
+    try:
+        user_data = get_user_data(user_id)
+        last_divorce = user_data.get('last_divorce')
+        
+        if last_divorce:
+            last_divorce_time = datetime.fromisoformat(last_divorce)
+            time_since = (datetime.now() - last_divorce_time).total_seconds()
+            if time_since < FAMILY_DIVORCE_COOLDOWN:
+                remaining_days = int((FAMILY_DIVORCE_COOLDOWN - time_since) // 86400)
+                return (False, f"Вы сможете развестись через {remaining_days} дней")
+        
+        return (True, "Можно разводиться")
+        
+    except Exception as e:
+        print(f"[ERROR] can_divorce: {e}")
+        return (True, "Можно разводиться")
+
+def set_divorce_time(user_id: int):
+    try:
+        user_data = get_user_data(user_id)
+        user_data['last_divorce'] = datetime.now().isoformat()
+        update_user_data(user_id, user_data)
+    except Exception as e:
+        print(f"[ERROR] set_divorce_time: {e}")
 
 # ==================== ФУНКЦИИ ДЛЯ ПРЕДЛОЖЕНИЙ ====================
 
 def create_marriage_proposal(from_id: int, to_id: int, proposal_text: str) -> int:
-    """Создать предложение о браке"""
     try:
         result = supabase.table('marriage_proposals').insert({
             'from_id': from_id,
@@ -424,7 +727,6 @@ def create_marriage_proposal(from_id: int, to_id: int, proposal_text: str) -> in
         return 0
 
 def get_marriage_proposal(proposal_id: int) -> Optional[dict]:
-    """Получить предложение о браке"""
     try:
         response = supabase.table('marriage_proposals').select('*').eq('proposal_id', proposal_id).execute()
         if not response.data:
@@ -435,7 +737,6 @@ def get_marriage_proposal(proposal_id: int) -> Optional[dict]:
         return None
 
 def delete_marriage_proposal(proposal_id: int):
-    """Удалить предложение о браке"""
     try:
         supabase.table('marriage_proposals').delete().eq('proposal_id', proposal_id).execute()
     except Exception as e:
@@ -444,7 +745,6 @@ def delete_marriage_proposal(proposal_id: int):
 # ==================== ФУНКЦИИ ДЛЯ ПОДАРКОВ ====================
 
 def send_gift(from_user_id: int, to_user_id: int, gift_type: str, message: str):
-    """Отправить подарок"""
     try:
         supabase.table('gifts').insert({
             'from_user_id': from_user_id,
@@ -458,7 +758,6 @@ def send_gift(from_user_id: int, to_user_id: int, gift_type: str, message: str):
         print(f"[ERROR] send_gift: {e}")
 
 def get_user_gifts(user_id: int) -> List[dict]:
-    """Получить подарки пользователя"""
     try:
         response = supabase.table('gifts').select('*').eq('to_user_id', user_id).order('timestamp', desc=True).execute()
         return response.data
@@ -467,9 +766,8 @@ def get_user_gifts(user_id: int) -> List[dict]:
         return []
 
 def get_gift_stats() -> List[dict]:
-    """Получить статистику подарков"""
     try:
-        response = supabase.table('gifts').select('to_user_id, count:to_user_id').execute()
+        response = supabase.table('gifts').select('to_user_id').execute()
         stats = {}
         for gift in response.data:
             stats[gift['to_user_id']] = stats.get(gift['to_user_id'], 0) + 1
@@ -483,7 +781,6 @@ def get_gift_stats() -> List[dict]:
 # ==================== ФУНКЦИИ ДЛЯ ПРИЗНАНИЙ ====================
 
 def add_confession(confession_text: str):
-    """Добавить признание"""
     try:
         supabase.table('confessions').insert({
             'confession_text': confession_text,
@@ -495,7 +792,6 @@ def add_confession(confession_text: str):
 # ==================== ФУНКЦИИ ДЛЯ ЛОВЛИ БИБЕРА ====================
 
 def get_bieber_catch_stats(user_id: int) -> dict:
-    """Получить статистику ловли Бибера"""
     try:
         response = supabase.table('bieber_catch').select('catches, fake_catches').eq('user_id', user_id).execute()
         if response.data:
@@ -506,12 +802,23 @@ def get_bieber_catch_stats(user_id: int) -> dict:
         return {"catches": 0, "fake_catches": 0}
 
 def update_bieber_catch_stats(user_id: int, real_catch: bool = True):
-    """Обновить статистику ловли Бибера"""
     try:
         if real_catch:
-            supabase.rpc('increment_catch', {'user_id': user_id}).execute()
+            response = supabase.table('bieber_catch').select('catches').eq('user_id', user_id).execute()
+            current = response.data[0]['catches'] if response.data else 0
+            supabase.table('bieber_catch').upsert({
+                'user_id': user_id,
+                'catches': current + 1,
+                'fake_catches': 0
+            }).execute()
         else:
-            supabase.rpc('increment_fake_catch', {'user_id': user_id}).execute()
+            response = supabase.table('bieber_catch').select('fake_catches').eq('user_id', user_id).execute()
+            current = response.data[0]['fake_catches'] if response.data else 0
+            supabase.table('bieber_catch').upsert({
+                'user_id': user_id,
+                'catches': 0,
+                'fake_catches': current + 1
+            }).execute()
         log_action(user_id, "bieber_catch", f"Real: {real_catch}")
     except Exception as e:
         print(f"[ERROR] update_bieber_catch_stats: {e}")

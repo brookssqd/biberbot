@@ -1,4 +1,5 @@
 import discord
+from datetime import datetime, timedelta
 
 # ==================== НАСТРОЙКИ ====================
 ADMIN_ROLE = "Admin"
@@ -10,11 +11,40 @@ GIFT_PRICE = 4000
 BIEBER_ESCAPE_INTERVAL = 1800
 
 # Настройки семьи
-FAMILY_UPGRADE_COSTS = {1: 8000, 2: 13000, 3: 19000, 4: 30000, 5: 50000}
-FAMILY_HOURLY_BONUSES = {0: 0, 1: 10, 2: 20, 3: 50, 4: 100, 5: 180}
+FAMILY_UPGRADE_COSTS = {
+    1: 5000,   # 1 -> 2 уровень
+    2: 15000,  # 2 -> 3 уровень
+    3: 35000,  # 3 -> 4 уровень
+    4: 70000,  # 4 -> 5 уровень
+    5: 120000  # 5 -> 6 уровень
+}
+
+FAMILY_HOURLY_BONUSES = {
+    0: 0,
+    1: 5,     # 5 бибсов в час
+    2: 15,    # 15 бибсов в час
+    3: 30,    # 30 бибсов в час
+    4: 60,    # 60 бибсов в час
+    5: 120,   # 120 бибсов в час
+    6: 250    # 250 бибсов в час
+}
+
+FAMILY_MAX_LEVEL = 6
+FAMILY_MAX_CHILDREN = 5
+FAMILY_UPGRADE_COOLDOWN = 86400
+FAMILY_DIVORCE_COOLDOWN = 604800
+FAMILY_JOIN_COOLDOWN = 86400
+
+FAMILY_UPGRADE_REQUIREMENTS = {
+    2: {"min_children": 0, "min_family_age_days": 0},
+    3: {"min_children": 1, "min_family_age_days": 3},
+    4: {"min_children": 2, "min_family_age_days": 7},
+    5: {"min_children": 3, "min_family_age_days": 14},
+    6: {"min_children": 4, "min_family_age_days": 30}
+}
 
 # Настройки карт
-CARD_DROP_COOLDOWN = 43200  # 12 часов
+CARD_DROP_COOLDOWN = 43200
 user_last_card_drop = {}
 
 # ==================== КОЛЛЕКЦИОННЫЕ КАРТОЧКИ ====================
@@ -125,7 +155,7 @@ SECRET_COMBOS = {
         "message": "🔓 **ИДЕАЛЬНЫЕ ОТНОШЕНИЯ!** Ты мастер романтики! +1500 бибсов!",
         "rarity": "rare"
     },
-    "дуэль→принять→бой→дуэль→бой": {
+    "дуэль→принятьдуэль→бой→дуэль→бой": {
         "reward": 2500,
         "message": "🔓 **НЕПОБЕДИМЫЙ ВОИН!** Твои победы в дуэлях впечатляют! +2500 бибсов!",
         "rarity": "epic"
@@ -168,8 +198,16 @@ COMMAND_REACTIONS = {
     "любовь": ["💖", "💗", "💓"],
     "подарок": ["🎁", "🎀", "✨"],
     "дуэль": ["⚔️", "🏆", "🎯"],
+    "принятьдуэль": ["⚔️", "✅", "🎯"],
+    "отменитьдуэль": ["❌", "🚫", "⚔️"],
+    "бой": ["⚔️", "💥", "🔥"],
     "передать": ["💸", "💳", "💰"],
-    "купить": ["🛒", "💎", "🔮"]
+    "купить": ["🛒", "💎", "🔮"],
+    "улучшитьсемью": ["🏠", "⬆️", "💒"],
+    "развестись": ["💔", "❌", "💒"],
+    "добавитьребенка": ["👶", "➕", "👪"],
+    "исключитьребенка": ["👶", "❌", "👪"],
+    "выйти": ["🚪", "👋", "👪"]
 }
 
 # Авто-реакции на ключевые слова
@@ -190,44 +228,150 @@ AUTO_REACTIONS = {
 
 # ==================== МАГАЗИН ====================
 SHOP_ITEMS = {
-    "twitter_scroll": {
-        "name": "Твиттер-свиток",
-        "price": 4500,
-        "type": "permanent",
-        "effect": {"command": "sermon", "bonus": 20}
+    "temporary_pray_7d": {
+        "name": "Свеча веры",
+        "price": 1500,
+        "type": "temporary",
+        "duration_days": 7,
+        "effect": {"command": "pray", "bonus": 15},
+        "description": "✨ +15% к награде за молитву на 7 дней"
     },
-    "wet_relic": {
-        "name": "Промокшая реликвия",
-        "price": 9000,
-        "type": "permanent",
-        "effect": {"command": "pray", "bonus": 20}
+    "temporary_sermon_7d": {
+        "name": "Свиток пророка",
+        "price": 1500,
+        "type": "temporary",
+        "duration_days": 7,
+        "effect": {"command": "sermon", "bonus": 15},
+        "description": "📖 +15% к награде за проповедь на 7 дней"
     },
-    "bieber_amulet": {
-        "name": "Амулет Бибера",
-        "price": 13500,
-        "type": "permanent",
-        "effect": {"command": "pray", "bonus": 30}
+    "temporary_all_7d": {
+        "name": "Бибер-аура",
+        "price": 3000,
+        "type": "temporary",
+        "duration_days": 7,
+        "effect": {"command": "all", "bonus": 10},
+        "description": "🌟 +10% ко ВСЕМ командам заработка на 7 дней"
     },
-    "fan_tape": {
-        "name": "Фанатская касета",
-        "price": 18000,
-        "type": "permanent",
-        "effect": {"command": "pray", "bonus": 40}
+    "temporary_pray_15d": {
+        "name": "Алтарный крест",
+        "price": 2800,
+        "type": "temporary",
+        "duration_days": 15,
+        "effect": {"command": "pray", "bonus": 20},
+        "description": "✨ +20% к награде за молитву на 15 дней"
     },
-    "personal_role": {
-        "name": "Личная роль",
-        "price": 50000,
-        "type": "role"
+    "temporary_sermon_15d": {
+        "name": "Скрижали мудрости",
+        "price": 2800,
+        "type": "temporary",
+        "duration_days": 15,
+        "effect": {"command": "sermon", "bonus": 20},
+        "description": "📖 +20% к награде за проповедь на 15 дней"
     },
-    "personal_tag": {
-        "name": "Тег",
+    "temporary_all_15d": {
+        "name": "Божественное сияние",
+        "price": 5500,
+        "type": "temporary",
+        "duration_days": 15,
+        "effect": {"command": "all", "bonus": 15},
+        "description": "🌟 +15% ко ВСЕМ командам заработка на 15 дней"
+    },
+    "temporary_pray_30d": {
+        "name": "Реликвия веры",
+        "price": 5000,
+        "type": "temporary",
+        "duration_days": 30,
+        "effect": {"command": "pray", "bonus": 30},
+        "description": "✨ +30% к награде за молитву на 30 дней"
+    },
+    "temporary_sermon_30d": {
+        "name": "Кодекс пророка",
+        "price": 5000,
+        "type": "temporary",
+        "duration_days": 30,
+        "effect": {"command": "sermon", "bonus": 30},
+        "description": "📖 +30% к награде за проповедь на 30 дней"
+    },
+    "temporary_all_30d": {
+        "name": "Ангельские крылья",
+        "price": 10000,
+        "type": "temporary",
+        "duration_days": 30,
+        "effect": {"command": "all", "bonus": 25},
+        "description": "🌟 +25% ко ВСЕМ командам заработка на 30 дней"
+    },
+    "permanent_pray": {
+        "name": "Бибер-амулет",
         "price": 25000,
-        "type": "tag"
+        "type": "permanent",
+        "effect": {"command": "pray", "bonus": 15},
+        "description": "💎 +15% к молитве НАВСЕГДА"
     },
-    "gift": {
-        "name": "Подарок",
-        "price": GIFT_PRICE,
-        "type": "gift"
+    "permanent_sermon": {
+        "name": "Бибер-свиток",
+        "price": 25000,
+        "type": "permanent",
+        "effect": {"command": "sermon", "bonus": 15},
+        "description": "💎 +15% к проповеди НАВСЕГДА"
+    },
+    "permanent_all": {
+        "name": "Венец Belieber'а",
+        "price": 50000,
+        "type": "permanent",
+        "effect": {"command": "all", "bonus": 10},
+        "description": "👑 +10% ко ВСЕМ командам НАВСЕГДА"
+    }
+}
+
+# ==================== РАСХОДУЕМЫЕ ПРЕДМЕТЫ ====================
+CONSUMABLE_ITEMS = {
+    "doubler": {
+        "name": "⚡ Удвоитель удачи",
+        "price": 2000,
+        "type": "consumable",
+        "max_per_day": 3,
+        "effect": {"type": "next_double", "command": "all"},
+        "description": "Следующая команда заработка даёт x2 награду (до 3 шт/день)"
+    },
+    "shield": {
+        "name": "🛡️ Защитный амулет",
+        "price": 1500,
+        "type": "consumable",
+        "max_per_day": 3,
+        "effect": {"type": "protect", "from": "ecstasy"},
+        "description": "Защищает от штрафа в !экстаз (1 раз, до 3 шт/день)"
+    },
+    "card_charm": {
+        "name": "🎴 Карточный талисман",
+        "price": 1200,
+        "type": "consumable",
+        "max_per_day": 3,
+        "effect": {"type": "card_chance", "bonus": 15},
+        "description": "+15% к шансу выпадения карты (до 3 шт/день)"
+    },
+    "reset_cooldown": {
+        "name": "⏰ Эликсир времени",
+        "price": 3000,
+        "type": "consumable",
+        "max_per_day": 1,
+        "effect": {"type": "reset_cooldown", "command": "all"},
+        "description": "Сбрасывает КД всех команд заработка (1 раз в день)"
+    },
+    "lottery_ticket": {
+        "name": "🎫 Лотерейный билет",
+        "price": 100,
+        "type": "consumable",
+        "max_per_day": 10,
+        "effect": {"type": "lottery", "win_chance": 10, "win_amount": 1000},
+        "description": "Шанс 10% выиграть 1000 бибсов! (до 10 шт/день)"
+    },
+    "duel_shield": {
+        "name": "⚔️ Оберег дуэлянта",
+        "price": 1800,
+        "type": "consumable",
+        "max_per_day": 3,
+        "effect": {"type": "duel_protect"},
+        "description": "Защищает от проигрыша в дуэли (до 3 шт/день)"
     }
 }
 
