@@ -1412,7 +1412,7 @@ async def remove_child(ctx, member: discord.Member):
 @bot.command(name='улучшитьсемью')
 @in_command_channel()
 @add_command_reaction("улучшитьсемью")
-async def upgrade_family_cmd(ctx):
+async def upgrade_family_cmd(ctx, confirm: str = None):
     family = get_family_by_member(ctx.author.id)
     
     if not family:
@@ -1433,56 +1433,41 @@ async def upgrade_family_cmd(ctx):
         await ctx.send(embed=embed)
         return
     
-    req = FAMILY_UPGRADE_REQUIREMENTS.get(next_level, {})
-    min_children = req.get("min_children", 0)
-    min_age_days = req.get("min_family_age_days", 0)
-    cost = FAMILY_UPGRADE_COSTS.get(current_level, 5000)
-    
-    family_age = get_family_age_days(family['family_id'])
-    
-    last_upgrade = get_family_upgrade_cooldown(family['family_id'])
-    cooldown_text = ""
-    if last_upgrade:
-        time_since = (datetime.now() - last_upgrade).total_seconds()
-        if time_since < FAMILY_UPGRADE_COOLDOWN:
-            remaining_hours = int((FAMILY_UPGRADE_COOLDOWN - time_since) // 3600)
-            remaining_minutes = int(((FAMILY_UPGRADE_COOLDOWN - time_since) % 3600) // 60)
-            cooldown_text = f"\n⏳ Кулдаун улучшения: {remaining_hours}ч {remaining_minutes}м"
-    
-    embed = create_embed(
-        f"🏠 УЛУЧШЕНИЕ СЕМЬИ ({current_level} → {next_level})",
-        f"**Семья:** {family['family_name']}\n"
-        f"**Текущий бонус:** {FAMILY_HOURLY_BONUSES[current_level]} {EMOJIS['bibsy']}/час\n"
-        f"**Следующий бонус:** {FAMILY_HOURLY_BONUSES[next_level]} {EMOJIS['bibsy']}/час\n\n"
-        f"**Требования:**\n"
-        f"• 👶 Детей: {len(family['children'])}/{min_children}\n"
-        f"• 📅 Возраст семьи: {family_age}/{min_age_days} дней\n"
-        f"• 💰 Стоимость: {cost} {EMOJIS['bibsy']}\n"
-        f"{cooldown_text}\n\n"
-        f"Чтобы улучшить, напишите `!улучшитьсемью подтвердить`",
-        discord.Color.blue()
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='улучшитьсемью')
-@in_command_channel()
-@add_command_reaction("улучшитьсемью")
-async def upgrade_family_confirm(ctx, confirm: str = None):
+    # Если это не подтверждение - показываем информацию
     if confirm != "подтвердить":
-        return
-    
-    family = get_family_by_member(ctx.author.id)
-    
-    if not family:
-        embed = create_embed("❌ Ошибка", "Вы не состоите в семье!", discord.Color.red())
+        req = FAMILY_UPGRADE_REQUIREMENTS.get(next_level, {})
+        min_children = req.get("min_children", 0)
+        min_age_days = req.get("min_family_age_days", 0)
+        cost = FAMILY_UPGRADE_COSTS.get(current_level, 5000)
+        
+        family_age = get_family_age_days(family['family_id'])
+        
+        last_upgrade = get_family_upgrade_cooldown(family['family_id'])
+        cooldown_text = ""
+        if last_upgrade:
+            time_since = (datetime.now() - last_upgrade).total_seconds()
+            if time_since < FAMILY_UPGRADE_COOLDOWN:
+                remaining_hours = int((FAMILY_UPGRADE_COOLDOWN - time_since) // 3600)
+                remaining_minutes = int(((FAMILY_UPGRADE_COOLDOWN - time_since) % 3600) // 60)
+                cooldown_text = f"\n⏳ Кулдаун улучшения: {remaining_hours}ч {remaining_minutes}м"
+        
+        embed = create_embed(
+            f"🏠 УЛУЧШЕНИЕ СЕМЬИ ({current_level} → {next_level})",
+            f"**Семья:** {family['family_name']}\n"
+            f"**Текущий бонус:** {FAMILY_HOURLY_BONUSES[current_level]} {EMOJIS['bibsy']}/час\n"
+            f"**Следующий бонус:** {FAMILY_HOURLY_BONUSES[next_level]} {EMOJIS['bibsy']}/час\n\n"
+            f"**Требования:**\n"
+            f"• 👶 Детей: {len(family['children'])}/{min_children}\n"
+            f"• 📅 Возраст семьи: {family_age}/{min_age_days} дней\n"
+            f"• 💰 Стоимость: {cost} {EMOJIS['bibsy']}\n"
+            f"{cooldown_text}\n\n"
+            f"Чтобы улучшить, напишите `!улучшитьсемью подтвердить`",
+            discord.Color.blue()
+        )
         await ctx.send(embed=embed)
         return
     
-    if ctx.author.id not in [family["spouse1_id"], family["spouse2_id"]]:
-        embed = create_embed("❌ Ошибка", "Только супруги могут улучшать семью!", discord.Color.red())
-        await ctx.send(embed=embed)
-        return
-    
+    # Подтверждение улучшения
     success, message = upgrade_family_with_checks(family["family_id"], FAMILY_UPGRADE_COSTS, FAMILY_UPGRADE_REQUIREMENTS, FAMILY_MAX_LEVEL, FAMILY_UPGRADE_COOLDOWN)
     
     if success:
@@ -1541,7 +1526,7 @@ async def list_children(ctx):
 @bot.command(name='развестись')
 @in_command_channel()
 @add_command_reaction("развестись")
-async def divorce(ctx):
+async def divorce_cmd(ctx, confirm: str = None):
     family = get_family_by_member(ctx.author.id)
     
     if not family or ctx.author.id not in [family["spouse1_id"], family["spouse2_id"]]:
@@ -1549,38 +1534,27 @@ async def divorce(ctx):
         await ctx.send(embed=embed)
         return
     
-    can, message = can_divorce(ctx.author.id, FAMILY_DIVORCE_COOLDOWN)
-    if not can:
-        embed = create_embed("❌ Нельзя развестись", message, discord.Color.red())
-        await ctx.send(embed=embed)
-        return
-    
-    embed = create_embed(
-        "⚠️ ПОДТВЕРЖДЕНИЕ РАЗВОДА",
-        f"Вы действительно хотите развестись?\n\n"
-        f"После развода:\n"
-        f"• Семья будет распущена\n"
-        f"• Дети останутся без семьи\n"
-        f"• Вы сможете вступить в новую семью через {FAMILY_JOIN_COOLDOWN // 86400} дней\n\n"
-        f"**Напишите `!развестись да` чтобы подтвердить**",
-        discord.Color.red()
-    )
-    await ctx.send(embed=embed)
-
-@bot.command(name='развестись')
-@in_command_channel()
-@add_command_reaction("развестись")
-async def divorce_confirm(ctx, confirm: str = None):
     if confirm != "да":
-        return
-    
-    family = get_family_by_member(ctx.author.id)
-    
-    if not family or ctx.author.id not in [family["spouse1_id"], family["spouse2_id"]]:
-        embed = create_embed("❌ Ошибка", "Вы не состоите в браке!", discord.Color.red())
+        can, message = can_divorce(ctx.author.id, FAMILY_DIVORCE_COOLDOWN)
+        if not can:
+            embed = create_embed("❌ Нельзя развестись", message, discord.Color.red())
+            await ctx.send(embed=embed)
+            return
+        
+        embed = create_embed(
+            "⚠️ ПОДТВЕРЖДЕНИЕ РАЗВОДА",
+            f"Вы действительно хотите развестись?\n\n"
+            f"После развода:\n"
+            f"• Семья будет распущена\n"
+            f"• Дети останутся без семьи\n"
+            f"• Вы сможете вступить в новую семью через {FAMILY_JOIN_COOLDOWN // 86400} дней\n\n"
+            f"**Напишите `!развестись да` чтобы подтвердить**",
+            discord.Color.red()
+        )
         await ctx.send(embed=embed)
         return
     
+    # Подтверждение развода
     can, message = can_divorce(ctx.author.id, FAMILY_DIVORCE_COOLDOWN)
     if not can:
         embed = create_embed("❌ Нельзя развестись", message, discord.Color.red())
