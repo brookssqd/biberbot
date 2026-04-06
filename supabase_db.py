@@ -15,6 +15,35 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# ==================== ДАННЫЕ ДЛЯ АЧИВОК (избегаем циклического импорта) ====================
+ACHIEVEMENTS_DATA = {
+    "pray_10": {"name": "🙏 Первые шаги", "desc": "Совершить 10 молитв", "reward": 100},
+    "pray_100": {"name": "🙌 Истинный верующий", "desc": "Совершить 100 молитв", "reward": 500, "permanent_bonus": {"command": "pray", "bonus": 2}},
+    "pray_1000": {"name": "👼 Святой покровитель", "desc": "Совершить 1000 молитв", "reward": 2000, "permanent_bonus": {"command": "pray", "bonus": 5}},
+    "sermon_10": {"name": "📖 Первая проповедь", "desc": "Провести 10 проповедей", "reward": 100},
+    "sermon_100": {"name": "✝️ Глашатай веры", "desc": "Провести 100 проповедей", "reward": 500, "permanent_bonus": {"command": "sermon", "bonus": 2}},
+    "sermon_1000": {"name": "📜 Пророк", "desc": "Провести 1000 проповедей", "reward": 2000, "permanent_bonus": {"command": "sermon", "bonus": 5}},
+    "cards_5": {"name": "🎴 Начинающий коллекционер", "desc": "Собрать 5 карт", "reward": 200},
+    "cards_15": {"name": "🎴 Знаток Бибера", "desc": "Собрать 15 карт", "reward": 500, "permanent_bonus": {"command": "card", "bonus": 3}},
+    "cards_all": {"name": "🎴 Легендарный коллекционер", "desc": "Собрать ВСЕ карты", "reward": 5000, "permanent_bonus": {"command": "card", "bonus": 10}},
+    "balance_1000": {"name": "💰 Первый капитал", "desc": "Накопить 1000 бибсов", "reward": 200},
+    "balance_10000": {"name": "💎 Бибер-миллионер", "desc": "Накопить 10000 бибсов", "reward": 1000, "permanent_bonus": {"command": "all", "bonus": 3}},
+    "balance_100000": {"name": "👑 Король фанатов", "desc": "Накопить 100000 бибсов", "reward": 5000, "permanent_bonus": {"command": "all", "bonus": 5}},
+    "catch_5": {"name": "🎣 Первая добыча", "desc": "Поймать Бибера 5 раз", "reward": 300},
+    "catch_25": {"name": "🏃 Охотник за Бибером", "desc": "Поймать Бибера 25 раз", "reward": 1000, "permanent_bonus": {"command": "catch", "bonus": 5}},
+    "catch_100": {"name": "⚡ Легендарный охотник", "desc": "Поймать Бибера 100 раз", "reward": 3000, "permanent_bonus": {"command": "catch", "bonus": 10}},
+    "duel_5": {"name": "⚔️ Первая победа", "desc": "Выиграть 5 дуэлей", "reward": 500},
+    "duel_25": {"name": "🏆 Непобедимый", "desc": "Выиграть 25 дуэлей", "reward": 1500, "permanent_bonus": {"command": "duel", "bonus": 5}},
+    "duel_100": {"name": "👊 Легенда дуэлей", "desc": "Выиграть 100 дуэлей", "reward": 5000, "permanent_bonus": {"command": "duel", "bonus": 10}},
+    "family_create": {"name": "💍 В браке", "desc": "Создать семью", "reward": 1000},
+    "family_level_3": {"name": "🏠 Крепкая семья", "desc": "Улучшить семью до 3 уровня", "reward": 2000, "permanent_bonus": {"command": "family", "bonus": 5}},
+    "family_level_6": {"name": "👑 Королевская семья", "desc": "Улучшить семью до 6 уровня", "reward": 5000, "permanent_bonus": {"command": "family", "bonus": 10}},
+    "combo_1": {"name": "🤫 Знаток секретов", "desc": "Найти первую секретную комбинацию", "reward": 500},
+    "combo_5": {"name": "🧙‍♂️ Мастер комбинаций", "desc": "Найти 5 секретных комбинаций", "reward": 2000, "permanent_bonus": {"command": "combo", "bonus": 10}},
+    "combo_all": {"name": "🧙‍♂️ Архимаг", "desc": "Найти ВСЕ секретные комбинации", "reward": 5000, "permanent_bonus": {"command": "combo", "bonus": 20}},
+}
+SECRET_COMBOS_COUNT = 8  # Всего 8 секретных комбинаций
+
 # ==================== ФУНКЦИИ ДЛЯ ЛОГИРОВАНИЯ ====================
 
 def log_action(user_id: int, command: str, details: str = ""):
@@ -108,7 +137,10 @@ def get_user_data(user_id: int) -> dict:
                 "last_family_join": None,
                 "consumables": {},
                 "next_double": False,
-                "protect_ecstasy": False
+                "protect_ecstasy": False,
+                "stats": {},
+                "achievements": [],
+                "achievement_bonuses": {}
             }
         
         data = response.data[0]
@@ -117,6 +149,9 @@ def get_user_data(user_id: int) -> dict:
         cards = json.loads(data.get('cards', '[]'))
         completed_combos = json.loads(data.get('completed_combos', '[]'))
         consumables = json.loads(data.get('consumables', '{}'))
+        stats = json.loads(data.get('stats', '{}'))
+        achievements = json.loads(data.get('achievements', '[]'))
+        achievement_bonuses = json.loads(data.get('achievement_bonuses', '{}'))
         
         return {
             "balance": data.get('balance', 0),
@@ -134,7 +169,10 @@ def get_user_data(user_id: int) -> dict:
             "last_family_join": data.get('last_family_join'),
             "consumables": consumables,
             "next_double": data.get('next_double', False),
-            "protect_ecstasy": data.get('protect_ecstasy', False)
+            "protect_ecstasy": data.get('protect_ecstasy', False),
+            "stats": stats,
+            "achievements": achievements,
+            "achievement_bonuses": achievement_bonuses
         }
     except Exception as e:
         print(f"[ERROR] get_user_data: {e}")
@@ -158,7 +196,10 @@ def update_user_data(user_id: int, data: dict):
             'last_family_join': data.get('last_family_join'),
             'consumables': json.dumps(data.get('consumables', {})),
             'next_double': data.get('next_double', False),
-            'protect_ecstasy': data.get('protect_ecstasy', False)
+            'protect_ecstasy': data.get('protect_ecstasy', False),
+            'stats': json.dumps(data.get('stats', {})),
+            'achievements': json.dumps(data.get('achievements', [])),
+            'achievement_bonuses': json.dumps(data.get('achievement_bonuses', {}))
         }).eq('user_id', user_id).execute()
     except Exception as e:
         print(f"[ERROR] update_user_data: {e}")
@@ -214,40 +255,7 @@ def get_user_cards_collection(user_id: int) -> dict:
         print(f"[ERROR] get_user_cards_collection: {e}")
         return {"common": [], "rare": [], "epic": [], "legendary": [], "mythic": [], "total": 0, "total_possible": 0}
 
-# ==================== ФУНКЦИИ ДЛЯ КОМБИНАЦИЙ ====================
-
-def check_secret_combo(user_id: int, command_sequence: list, SECRET_COMBOS: dict) -> Optional[Tuple[str, dict]]:
-    combo_str = "→".join(command_sequence)
-    
-    if combo_str in SECRET_COMBOS:
-        response = supabase.table('users').select('completed_combos').eq('user_id', user_id).execute()
-        completed = []
-        
-        if response.data and response.data[0].get('completed_combos'):
-            completed = json.loads(response.data[0]['completed_combos'])
-        
-        if combo_str in completed:
-            return None
-        
-        return (combo_str, SECRET_COMBOS[combo_str])
-    
-    return None
-
-def complete_combo(user_id: int, combo_str: str):
-    try:
-        response = supabase.table('users').select('completed_combos').eq('user_id', user_id).execute()
-        completed = []
-        
-        if response.data and response.data[0].get('completed_combos'):
-            completed = json.loads(response.data[0]['completed_combos'])
-        
-        if combo_str not in completed:
-            completed.append(combo_str)
-            supabase.table('users').update({'completed_combos': json.dumps(completed)}).eq('user_id', user_id).execute()
-    except Exception as e:
-        print(f"[ERROR] complete_combo: {e}")
-
-# ==================== НОВАЯ СИСТЕМА АРТЕФАКТОВ ====================
+# ==================== СИСТЕМА АРТЕФАКТОВ ====================
 
 def add_temporary_artifact(user_id: int, artifact_id: str, duration_days: int) -> bool:
     try:
@@ -349,6 +357,10 @@ def get_active_bonus_percent(user_id: int, command: str) -> int:
             if effect.get("command") == command or effect.get("command") == "all":
                 total_bonus += effect.get("bonus", 0)
         
+        # Добавляем бонус от достижений
+        achievement_bonus = get_achievement_bonus(user_id, command)
+        total_bonus += achievement_bonus
+        
         return min(total_bonus, 300)
         
     except Exception as e:
@@ -357,47 +369,17 @@ def get_active_bonus_percent(user_id: int, command: str) -> int:
 
 # ==================== СИСТЕМА АЧИВОК ====================
 
-ACHIEVEMENTS_DATA = {
-    # МОЛИТВЫ
-    "pray_10": {"name": "🙏 Первые шаги", "desc": "Совершить 10 молитв", "reward": 100},
-    "pray_100": {"name": "🙌 Истинный верующий", "desc": "Совершить 100 молитв", "reward": 500, "permanent_bonus": {"command": "pray", "bonus": 2}},
-    "pray_1000": {"name": "👼 Святой покровитель", "desc": "Совершить 1000 молитв", "reward": 2000, "permanent_bonus": {"command": "pray", "bonus": 5}},
+def get_achievement_bonus(user_id: int, command: str) -> int:
+    """Получить бонус от достижений"""
+    user_data = get_user_data(user_id)
+    bonuses = user_data.get("achievement_bonuses", {})
     
-    # ПРОПОВЕДИ
-    "sermon_10": {"name": "📖 Первая проповедь", "desc": "Провести 10 проповедей", "reward": 100},
-    "sermon_100": {"name": "✝️ Глашатай веры", "desc": "Провести 100 проповедей", "reward": 500, "permanent_bonus": {"command": "sermon", "bonus": 2}},
-    "sermon_1000": {"name": "📜 Пророк", "desc": "Провести 1000 проповедей", "reward": 2000, "permanent_bonus": {"command": "sermon", "bonus": 5}},
+    total = 0
+    for ach_id, bonus in bonuses.items():
+        if bonus.get("command") == command or bonus.get("command") == "all":
+            total += bonus.get("bonus", 0)
     
-    # КАРТЫ
-    "cards_5": {"name": "🎴 Начинающий коллекционер", "desc": "Собрать 5 карт", "reward": 200},
-    "cards_15": {"name": "🎴 Знаток Бибера", "desc": "Собрать 15 карт", "reward": 500, "permanent_bonus": {"command": "card", "bonus": 3}},
-    "cards_all": {"name": "🎴 Легендарный коллекционер", "desc": "Собрать ВСЕ карты", "reward": 5000, "permanent_bonus": {"command": "card", "bonus": 10}},
-    
-    # БАЛАНС
-    "balance_1000": {"name": "💰 Первый капитал", "desc": "Накопить 1000 бибсов", "reward": 200},
-    "balance_10000": {"name": "💎 Бибер-миллионер", "desc": "Накопить 10000 бибсов", "reward": 1000, "permanent_bonus": {"command": "all", "bonus": 3}},
-    "balance_100000": {"name": "👑 Король фанатов", "desc": "Накопить 100000 бибсов", "reward": 5000, "permanent_bonus": {"command": "all", "bonus": 5}},
-    
-    # ЛОВЛЯ БИБЕРА
-    "catch_5": {"name": "🎣 Первая добыча", "desc": "Поймать Бибера 5 раз", "reward": 300},
-    "catch_25": {"name": "🏃 Охотник за Бибером", "desc": "Поймать Бибера 25 раз", "reward": 1000, "permanent_bonus": {"command": "catch", "bonus": 5}},
-    "catch_100": {"name": "⚡ Легендарный охотник", "desc": "Поймать Бибера 100 раз", "reward": 3000, "permanent_bonus": {"command": "catch", "bonus": 10}},
-    
-    # ДУЭЛИ
-    "duel_5": {"name": "⚔️ Первая победа", "desc": "Выиграть 5 дуэлей", "reward": 500},
-    "duel_25": {"name": "🏆 Непобедимый", "desc": "Выиграть 25 дуэлей", "reward": 1500, "permanent_bonus": {"command": "duel", "bonus": 5}},
-    "duel_100": {"name": "👊 Легенда дуэлей", "desc": "Выиграть 100 дуэлей", "reward": 5000, "permanent_bonus": {"command": "duel", "bonus": 10}},
-    
-    # СЕМЬЯ
-    "family_create": {"name": "💍 В браке", "desc": "Создать семью", "reward": 1000},
-    "family_level_3": {"name": "🏠 Крепкая семья", "desc": "Улучшить семью до 3 уровня", "reward": 2000, "permanent_bonus": {"command": "family", "bonus": 5}},
-    "family_level_6": {"name": "👑 Королевская семья", "desc": "Улучшить семью до 6 уровня", "reward": 5000, "permanent_bonus": {"command": "family", "bonus": 10}},
-    
-    # КОМБИНАЦИИ
-    "combo_1": {"name": "🤫 Знаток секретов", "desc": "Найти первую секретную комбинацию", "reward": 500},
-    "combo_5": {"name": "🧙‍♂️ Мастер комбинаций", "desc": "Найти 5 секретных комбинаций", "reward": 2000, "permanent_bonus": {"command": "combo", "bonus": 10}},
-    "combo_all": {"name": "🧙‍♂️ Архимаг", "desc": "Найти ВСЕ секретные комбинации", "reward": 5000, "permanent_bonus": {"command": "combo", "bonus": 20}},
-}
+    return min(total, 100)
 
 def check_achievements(user_id: int) -> list:
     """Проверить и выдать новые достижения"""
@@ -473,7 +455,7 @@ def check_achievements(user_id: int) -> list:
         new_achievements.append("combo_1")
     if "combo_5" not in achievements and combos_count >= 5:
         new_achievements.append("combo_5")
-    if "combo_all" not in achievements and combos_count >= len(SECRET_COMBOS):
+    if "combo_all" not in achievements and combos_count >= SECRET_COMBOS_COUNT:
         new_achievements.append("combo_all")
     
     # Выдаём награды
@@ -500,18 +482,6 @@ def check_achievements(user_id: int) -> list:
         update_user_data(user_id, user_data)
     
     return new_achievements
-
-def get_achievement_bonus(user_id: int, command: str) -> int:
-    """Получить бонус от достижений"""
-    user_data = get_user_data(user_id)
-    bonuses = user_data.get("achievement_bonuses", {})
-    
-    total = 0
-    for ach_id, bonus in bonuses.items():
-        if bonus.get("command") == command or bonus.get("command") == "all":
-            total += bonus.get("bonus", 0)
-    
-    return min(total, 100)
 
 # ==================== ФУНКЦИИ ДЛЯ РАСХОДУЕМЫХ ПРЕДМЕТОВ ====================
 
@@ -594,7 +564,7 @@ def add_consumable_purchase(user_id: int, item_id: str):
     except Exception as e:
         print(f"[ERROR] add_consumable_purchase: {e}")
 
-# ==================== СЕМЕЙНЫЕ ФУНКЦИИ (ОБНОВЛЁННЫЕ) ====================
+# ==================== СЕМЕЙНЫЕ ФУНКЦИИ ====================
 
 def get_family_by_member(user_id: int) -> Optional[dict]:
     try:
@@ -1069,6 +1039,17 @@ class DuelManager:
                 new_count = response.data[0]['count'] + 1
                 new_wins = response.data[0]['wins'] + (1 if won else 0)
                 supabase.table('duels').update({'count': new_count, 'wins': new_wins}).eq('user_id', user_id).eq('date', today).execute()
+                
+                # Обновляем статистику пользователя для ачивок
+                user_data = get_user_data(user_id)
+                stats = user_data.get("stats", {})
+                stats["duel_wins"] = stats.get("duel_wins", 0) + (1 if won else 0)
+                stats["duel_total"] = stats.get("duel_total", 0) + 1
+                user_data["stats"] = stats
+                update_user_data(user_id, user_data)
+                
+                # Проверяем достижения
+                check_achievements(user_id)
             else:
                 supabase.table('duels').insert({
                     'user_id': user_id,
@@ -1076,5 +1057,16 @@ class DuelManager:
                     'count': 1,
                     'wins': 1 if won else 0
                 }).execute()
+                
+                # Обновляем статистику пользователя для ачивок
+                user_data = get_user_data(user_id)
+                stats = user_data.get("stats", {})
+                stats["duel_wins"] = stats.get("duel_wins", 0) + (1 if won else 0)
+                stats["duel_total"] = stats.get("duel_total", 0) + 1
+                user_data["stats"] = stats
+                update_user_data(user_id, user_data)
+                
+                # Проверяем достижения
+                check_achievements(user_id)
         except Exception as e:
             print(f"[ERROR] increment_duel_count: {e}")

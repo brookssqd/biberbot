@@ -2202,6 +2202,210 @@ async def stats(ctx, member: discord.Member = None):
     
     await ctx.send(embed=embed)
 
+@bot.command(name='ачивки')
+@in_command_channel()
+async def show_achievements(ctx, member: discord.Member = None):
+    """Показать полученные достижения пользователя"""
+    target = member or ctx.author
+    
+    # Проверяем и обновляем достижения
+    new_achs = check_achievements(target.id)
+    
+    user_data = get_user_data(target.id)
+    achievements = user_data.get("achievements", [])
+    
+    # Считаем прогресс
+    total_achs = len(ACHIEVEMENTS_DATA)
+    earned_achs = len(achievements)
+    percent = int(earned_achs / total_achs * 100) if total_achs > 0 else 0
+    
+    embed = create_embed(
+        f"🏆 ДОСТИЖЕНИЯ {target.display_name}",
+        f"**Прогресс:** {earned_achs}/{total_achs} ({percent}%)",
+        discord.Color.gold()
+    )
+    
+    # Прогресс-бар
+    progress_bars = 10
+    filled = int(progress_bars * earned_achs / total_achs) if total_achs > 0 else 0
+    empty = progress_bars - filled
+    progress_bar = "█" * filled + "░" * empty
+    embed.add_field(name="📊 Общий прогресс", value=f"`{progress_bar}`", inline=False)
+    
+    # Группируем по категориям с прогрессом
+    categories = {
+        "🙏 МОЛИТВЫ": ["pray_10", "pray_100", "pray_1000"],
+        "📖 ПРОПОВЕДИ": ["sermon_10", "sermon_100", "sermon_1000"],
+        "🎴 КАРТЫ": ["cards_5", "cards_15", "cards_all"],
+        "💰 БАЛАНС": ["balance_1000", "balance_10000", "balance_100000"],
+        "🎣 ЛОВЛЯ БИБЕРА": ["catch_5", "catch_25", "catch_100"],
+        "⚔️ ДУЭЛИ": ["duel_5", "duel_25", "duel_100"],
+        "👪 СЕМЬЯ": ["family_create", "family_level_3", "family_level_6"],
+        "🤫 КОМБИНАЦИИ": ["combo_1", "combo_5", "combo_all"]
+    }
+    
+    for cat_name, cat_achievements in categories.items():
+        cat_text = ""
+        cat_earned = 0
+        for ach_id in cat_achievements:
+            if ach_id in ACHIEVEMENTS_DATA:
+                ach = ACHIEVEMENTS_DATA[ach_id]
+                status = "✅" if ach_id in achievements else "❌"
+                if ach_id in achievements:
+                    cat_earned += 1
+                cat_text += f"{status} **{ach['name']}**\n"
+        cat_total = len(cat_achievements)
+        if cat_text:
+            embed.add_field(
+                name=f"{cat_name} [{cat_earned}/{cat_total}]",
+                value=cat_text,
+                inline=True
+            )
+    
+    # Если есть новые достижения
+    if new_achs:
+        ach_names = ", ".join([ACHIEVEMENTS_DATA[a]["name"] for a in new_achs])
+        embed.set_footer(text=f"🎉 Новые достижения: {ach_names}")
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='достижения')
+@in_command_channel()
+async def list_all_achievements(ctx, category: str = None):
+    """Показать все достижения с условиями получения
+    Использование: !достижения [категория]
+    Категории: молитвы, проповеди, карты, баланс, ловля, дуэли, семья, комбинации"""
+    
+    categories = {
+        "молитвы": {
+            "emoji": "🙏",
+            "name": "МОЛИТВЫ",
+            "achs": ["pray_10", "pray_100", "pray_1000"],
+            "requirements": {
+                "pray_10": "Совершить 10 молитв",
+                "pray_100": "Совершить 100 молитв",
+                "pray_1000": "Совершить 1000 молитв"
+            }
+        },
+        "проповеди": {
+            "emoji": "📖",
+            "name": "ПРОПОВЕДИ",
+            "achs": ["sermon_10", "sermon_100", "sermon_1000"],
+            "requirements": {
+                "sermon_10": "Провести 10 проповедей",
+                "sermon_100": "Провести 100 проповедей",
+                "sermon_1000": "Провести 1000 проповедей"
+            }
+        },
+        "карты": {
+            "emoji": "🎴",
+            "name": "КАРТЫ",
+            "achs": ["cards_5", "cards_15", "cards_all"],
+            "requirements": {
+                "cards_5": "Собрать 5 разных карт",
+                "cards_15": "Собрать 15 разных карт",
+                "cards_all": "Собрать ВСЕ карты (9 шт)"
+            }
+        },
+        "баланс": {
+            "emoji": "💰",
+            "name": "БАЛАНС",
+            "achs": ["balance_1000", "balance_10000", "balance_100000"],
+            "requirements": {
+                "balance_1000": "Накопить 1000 бибсов",
+                "balance_10000": "Накопить 10000 бибсов",
+                "balance_100000": "Накопить 100000 бибсов"
+            }
+        },
+        "ловля": {
+            "emoji": "🎣",
+            "name": "ЛОВЛЯ БИБЕРА",
+            "achs": ["catch_5", "catch_25", "catch_100"],
+            "requirements": {
+                "catch_5": "Поймать Бибера 5 раз",
+                "catch_25": "Поймать Бибера 25 раз",
+                "catch_100": "Поймать Бибера 100 раз"
+            }
+        },
+        "дуэли": {
+            "emoji": "⚔️",
+            "name": "ДУЭЛИ",
+            "achs": ["duel_5", "duel_25", "duel_100"],
+            "requirements": {
+                "duel_5": "Выиграть 5 дуэлей",
+                "duel_25": "Выиграть 25 дуэлей",
+                "duel_100": "Выиграть 100 дуэлей"
+            }
+        },
+        "семья": {
+            "emoji": "👪",
+            "name": "СЕМЬЯ",
+            "achs": ["family_create", "family_level_3", "family_level_6"],
+            "requirements": {
+                "family_create": "Создать семью",
+                "family_level_3": "Улучшить семью до 3 уровня",
+                "family_level_6": "Улучшить семью до 6 уровня"
+            }
+        },
+        "комбинации": {
+            "emoji": "🤫",
+            "name": "КОМБИНАЦИИ",
+            "achs": ["combo_1", "combo_5", "combo_all"],
+            "requirements": {
+                "combo_1": "Найти 1 секретную комбинацию",
+                "combo_5": "Найти 5 секретных комбинаций",
+                "combo_all": "Найти ВСЕ секретные комбинации (8 шт)"
+            }
+        }
+    }
+    
+    # Если указана категория - показываем только её
+    if category and category.lower() in categories:
+        cat = categories[category.lower()]
+        embed = create_embed(
+            f"{cat['emoji']} ДОСТИЖЕНИЯ - {cat['name']}",
+            "Награды за достижения в этой категории:",
+            discord.Color.gold()
+        )
+        
+        for ach_id in cat["achs"]:
+            if ach_id in ACHIEVEMENTS_DATA:
+                ach = ACHIEVEMENTS_DATA[ach_id]
+                reward_text = f"🎁 {ach['reward']} бибсов"
+                if "permanent_bonus" in ach:
+                    bonus = ach["permanent_bonus"]
+                    reward_text += f"\n└ ✨ Постоянный бонус: +{bonus['bonus']}% к {bonus['command']}"
+                
+                embed.add_field(
+                    name=f"🏆 {ach['name']}",
+                    value=f"📋 Условие: {cat['requirements'][ach_id]}\n🎁 Награда: {reward_text}",
+                    inline=False
+                )
+        
+        embed.set_footer(text="Используйте !ачивки чтобы увидеть свой прогресс")
+        await ctx.send(embed=embed)
+        return
+    
+    # Если категория не указана - показываем все категории
+    embed = create_embed(
+        "🏆 ВСЕ ДОСТИЖЕНИЯ BIBERBOT",
+        "Выберите категорию для просмотра подробностей:\n"
+        "`!достижения молитвы`\n`!достижения проповеди`\n`!достижения карты`\n"
+        "`!достижения баланс`\n`!достижения ловля`\n`!достижения дуэли`\n"
+        "`!достижения семья`\n`!достижения комбинации`",
+        discord.Color.blue()
+    )
+    
+    for cat_key, cat_data in categories.items():
+        embed.add_field(
+            name=f"{cat_data['emoji']} {cat_data['name']}",
+            value=f"Достижений: {len(cat_data['achs'])}\n`!достижения {cat_key}`",
+            inline=True
+        )
+    
+    embed.set_footer(text="Всего достижений: 27")
+    await ctx.send(embed=embed)
+
 @bot.command(name='помощь')
 @in_command_channel()
 async def help_command(ctx):
@@ -2290,10 +2494,11 @@ async def help_command(ctx):
     # 🏆 ДОСТИЖЕНИЯ
     embed.add_field(
         name="🏆 ДОСТИЖЕНИЯ",
-        value="`!ачивки [@участник]` - посмотреть достижения",
+        value="`!ачивки [@участник]` - мои полученные достижения\n"
+              "`!достижения [категория]` - список всех достижений с условиями",
         inline=False
     )
-    
+
     # 🎮 ИГРЫ И ПРОЧЕЕ
     embed.add_field(
         name="🎮 ИГРЫ И ПРОЧЕЕ",
