@@ -1223,9 +1223,7 @@ async def roi(ctx, *, item_name: str):
             return
         
         # --- БАЗОВЫЕ ПАРАМЕТРЫ ДЛЯ РАСЧЁТА ---
-        # Реалистичное количество команд в день для обычного игрока
         cmds_per_day = 15
-        # Средняя награда за одну команду без бонусов
         avg_reward = 65
         
         # --- ВЫЧИСЛЯЕМ БОНУС ---
@@ -1233,30 +1231,30 @@ async def roi(ctx, *, item_name: str):
         effect = item_data.get("effect", {})
         
         if effect.get("type") == "instant":
-            # Мгновенные предметы (например, лотерейный билет)
             win_chance = effect.get("win_chance", 0)
             win_amount = effect.get("win_amount", 0)
             expected_value = (win_chance / 100) * win_amount
-            await ctx.send(embed=create_embed(
+            
+            embed = create_embed(
                 "📊 ОЦЕНКА РАСХОДНИКА",
                 f"**{item_data['name']}**\n\n"
                 f"💰 Цена: {item_data['price']} {EMOJIS['bibsy']}\n"
                 f"🎲 Ожидаемый выигрыш: ~{expected_value} {EMOJIS['bibsy']}\n"
-                f"{'✅ Выгодно!' if expected_value > item_data['price'] else '⚠️ Это лотерея, не гарантирует прибыль'}"
-            ), discord.Color.gold())
+                f"{'✅ Выгодно!' if expected_value > item_data['price'] else '⚠️ Это лотерея, не гарантирует прибыль'}",
+                discord.Color.gold()
+            )
+            await ctx.send(embed=embed)
             return
         
         # Для обычных артефактов
         if effect.get("command") == "all":
-            # Бонус ко всем командам — считаем, что игрок делает 15 разных команд
             bonus_percent = effect.get("bonus", 0)
             daily_extra = int((avg_reward * cmds_per_day) * (bonus_percent / 100))
             cmd_desc = "ко ВСЕМ командам"
         else:
-            # Бонус к одной команде — считаем, что игрок делает 15 этой команды
             bonus_percent = effect.get("bonus", 0)
             daily_extra = int((avg_reward * cmds_per_day) * (bonus_percent / 100))
-            cmd_desc = f"к команде !{item_data['effect'].get('command', '?')}"
+            cmd_desc = f"к команде !{effect.get('command', '?')}"
         
         # --- ОСНОВНОЙ ЭМБЕД ---
         embed = create_embed(
@@ -1273,7 +1271,6 @@ async def roi(ctx, *, item_name: str):
             days_to_roi = item_data['price'] / daily_extra
             embed.add_field(name="⏱️ Окупаемость", value=f"~{days_to_roi:.1f} дней", inline=False)
             
-            # --- КОММЕНТАРИЙ ДЛЯ ВРЕМЕННЫХ АРТЕФАКТОВ ---
             if item_data.get("type") == "temporary":
                 duration = item_data.get("duration_days", 7)
                 if days_to_roi <= duration:
@@ -1290,7 +1287,6 @@ async def roi(ctx, *, item_name: str):
                         inline=False
                     )
             else:
-                # Для постоянных артефактов
                 embed.add_field(
                     name="💎 ПОСТОЯННЫЙ БОНУС",
                     value=f"Окупится за {days_to_roi:.1f} дней, после чего будет приносить чистую прибыль.",
