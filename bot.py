@@ -1196,55 +1196,110 @@ async def artifacts_cmd(ctx):
 @bot.command(name='окупаемость')
 @in_command_channel()
 async def roi(ctx, *, item_name: str):
+    """Рассчитать окупаемость артефакта или расходника"""
     try:
         item_id = None
         item_data = None
+        is_consumable = False
         
+        # Ищем в обычных артефактах
         for key, item in SHOP_ITEMS.items():
             if item["name"].lower() == item_name.lower():
                 item_id = key
                 item_data = item
                 break
         
-        if not item_id:
+        # Если не нашли, ищем в расходниках
+        if not item_data:
             for key, item in CONSUMABLE_ITEMS.items():
                 if item["name"].lower() == item_name.lower():
                     item_id = key
                     item_data = item
+                    is_consumable = True
                     break
         
         if not item_data:
-            await ctx.send(embed=create_embed("❌ Ошибка", "Товар не найден!", discord.Color.red()))
+            await ctx.send(embed=create_embed("❌ Ошибка", "Товар не найден! Используйте `!магазин`", discord.Color.red()))
             return
         
-        avg_commands_per_day = 10
-        avg_reward_per_command = 60
+        # --- БАЗОВЫЕ ПАРАМЕТРЫ ДЛЯ РАСЧЁТА ---
+        # Реалистичное количество команд в день для обычного игрока
+        cmds_per_day = 15
+        # Средняя награда за одну команду без бонусов
+        avg_reward = 65
         
-        bonus_percent = item_data.get("effect", {}).get("bonus", 0)
-        bonus_per_command = int(avg_reward_per_command * bonus_percent / 100)
-        daily_extra = bonus_per_command * avg_commands_per_day
+        # --- ВЫЧИСЛЯЕМ БОНУС ---
+        bonus_percent = 0
+        effect = item_data.get("effect", {})
         
+        if effect.get("type") == "instant":
+            # Мгновенные предметы (например, лотерейный билет)
+            win_chance = effect.get("win_chance", 0)
+            win_amount = effect.get("win_amount", 0)
+            expected_value = (win_chance / 100) * win_amount
+            await ctx.send(embed=create_embed(
+                "📊 ОЦЕНКА РАСХОДНИКА",
+                f"**{item_data['name']}**\n\n"
+                f"💰 Цена: {item_data['price']} {EMOJIS['bibsy']}\n"
+                f"🎲 Ожидаемый выигрыш: ~{expected_value} {EMOJIS['bibsy']}\n"
+                f"{'✅ Выгодно!' if expected_value > item_data['price'] else '⚠️ Это лотерея, не гарантирует прибыль'}"
+            ), discord.Color.gold())
+            return
+        
+        # Для обычных артефактов
+        if effect.get("command") == "all":
+            # Бонус ко всем командам — считаем, что игрок делает 15 разных команд
+            bonus_percent = effect.get("bonus", 0)
+            daily_extra = int((avg_reward * cmds_per_day) * (bonus_percent / 100))
+            cmd_desc = "ко ВСЕМ командам"
+        else:
+            # Бонус к одной команде — считаем, что игрок делает 15 этой команды
+            bonus_percent = effect.get("bonus", 0)
+            daily_extra = int((avg_reward * cmds_per_day) * (bonus_percent / 100))
+            cmd_desc = f"к команде !{item_data['effect'].get('command', '?')}"
+        
+        # --- ОСНОВНОЙ ЭМБЕД ---
         embed = create_embed(
-            "📊 ОКУПАЕМОСТЬ",
-            f"**{item_data['name']}**\n\n"
-            f"💰 Цена: {item_data['price']} {EMOJIS['bibsy']}\n"
-            f"✨ Бонус: +{bonus_percent}%\n"
-            f"📈 Дополнительный доход в день: ~{daily_extra} {EMOJIS['bibsy']}",
+            f"📊 ОКУПАЕМОСТЬ: {item_data['name']}",
+            "",
             discord.Color.gold()
         )
+        
+        embed.add_field(name="💰 Цена", value=f"{item_data['price']} {EMOJIS['bibsy']}", inline=True)
+        embed.add_field(name="✨ Бонус", value=f"+{bonus_percent}% {cmd_desc}", inline=True)
+        embed.add_field(name="📈 Доп. доход в день", value=f"~{daily_extra} {EMOJIS['bibsy']}", inline=True)
         
         if daily_extra > 0:
             days_to_roi = item_data['price'] / daily_extra
             embed.add_field(name="⏱️ Окупаемость", value=f"~{days_to_roi:.1f} дней", inline=False)
             
+            # --- КОММЕНТАРИЙ ДЛЯ ВРЕМЕННЫХ АРТЕФАКТОВ ---
             if item_data.get("type") == "temporary":
                 duration = item_data.get("duration_days", 7)
                 if days_to_roi <= duration:
                     profit = int((duration - days_to_roi) * daily_extra)
-                    embed.add_field(name="✅ Выгодно!", value=f"Чистая прибыль за срок действия: ~{profit} {EMOJIS['bibsy']}", inline=False)
+                    embed.add_field(
+                        name="✅ ВЫГОДНО",
+                        value=f"Артефакт окупится за {days_to_roi:.1f} дн.\nЧистая прибыль за {duration} дн.: ~{profit} {EMOJIS['bibsy']}",
+                        inline=False
+                    )
                 else:
-                    embed.add_field(name="⚠️ Невыгодно!", value=f"Артефакт не окупится за {duration} дней.", inline=False)
+                    embed.add_field(
+                        name="⚠️ НЕ ВЫГОДНО",
+                        value=f"Артефакт НЕ окупится за {duration} дней.\nЛучше использовать более дешёвый или копить на постоянный.",
+                        inline=False
+                    )
+            else:
+                # Для постоянных артефактов
+                embed.add_field(
+                    name="💎 ПОСТОЯННЫЙ БОНУС",
+                    value=f"Окупится за {days_to_roi:.1f} дней, после чего будет приносить чистую прибыль.",
+                    inline=False
+                )
+        else:
+            embed.add_field(name="⚠️ Бонус не влияет на доход", value="Этот предмет не увеличивает заработок напрямую.", inline=False)
         
+        embed.set_footer(text="Расчёт приблизительный. Реальная окупаемость зависит от вашей активности.")
         await ctx.send(embed=embed)
         
     except Exception as e:

@@ -228,9 +228,10 @@ AUTO_REACTIONS = {
 
 # ==================== МАГАЗИН ====================
 SHOP_ITEMS = {
+    # ВРЕМЕННЫЕ АРТЕФАКТЫ (7 дней) - НОВЫЕ ЦЕНЫ
     "temporary_pray_7d": {
         "name": "Свеча веры",
-        "price": 1500,
+        "price": 600,  # было 1500
         "type": "temporary",
         "duration_days": 7,
         "effect": {"command": "pray", "bonus": 15},
@@ -238,7 +239,7 @@ SHOP_ITEMS = {
     },
     "temporary_sermon_7d": {
         "name": "Свиток пророка",
-        "price": 1500,
+        "price": 600,  # было 1500
         "type": "temporary",
         "duration_days": 7,
         "effect": {"command": "sermon", "bonus": 15},
@@ -246,15 +247,17 @@ SHOP_ITEMS = {
     },
     "temporary_all_7d": {
         "name": "Бибер-аура",
-        "price": 3000,
+        "price": 400,  # было 3000
         "type": "temporary",
         "duration_days": 7,
         "effect": {"command": "all", "bonus": 10},
         "description": "🌟 +10% ко ВСЕМ командам заработка на 7 дней"
     },
+    
+    # ВРЕМЕННЫЕ АРТЕФАКТЫ (15 дней) - НОВЫЕ ЦЕНЫ
     "temporary_pray_15d": {
         "name": "Алтарный крест",
-        "price": 2800,
+        "price": 1600,  # было 2800
         "type": "temporary",
         "duration_days": 15,
         "effect": {"command": "pray", "bonus": 20},
@@ -262,7 +265,7 @@ SHOP_ITEMS = {
     },
     "temporary_sermon_15d": {
         "name": "Скрижали мудрости",
-        "price": 2800,
+        "price": 1600,  # было 2800
         "type": "temporary",
         "duration_days": 15,
         "effect": {"command": "sermon", "bonus": 20},
@@ -270,15 +273,17 @@ SHOP_ITEMS = {
     },
     "temporary_all_15d": {
         "name": "Божественное сияние",
-        "price": 5500,
+        "price": 1200,  # было 5500
         "type": "temporary",
         "duration_days": 15,
         "effect": {"command": "all", "bonus": 15},
         "description": "🌟 +15% ко ВСЕМ командам заработка на 15 дней"
     },
+    
+    # ВРЕМЕННЫЕ АРТЕФАКТЫ (30 дней) - НОВЫЕ ЦЕНЫ
     "temporary_pray_30d": {
         "name": "Реликвия веры",
-        "price": 5000,
+        "price": 4500,  # было 5000
         "type": "temporary",
         "duration_days": 30,
         "effect": {"command": "pray", "bonus": 30},
@@ -286,7 +291,7 @@ SHOP_ITEMS = {
     },
     "temporary_sermon_30d": {
         "name": "Кодекс пророка",
-        "price": 5000,
+        "price": 4500,  # было 5000
         "type": "temporary",
         "duration_days": 30,
         "effect": {"command": "sermon", "bonus": 30},
@@ -294,12 +299,14 @@ SHOP_ITEMS = {
     },
     "temporary_all_30d": {
         "name": "Ангельские крылья",
-        "price": 10000,
+        "price": 3700,  # было 10000
         "type": "temporary",
         "duration_days": 30,
         "effect": {"command": "all", "bonus": 25},
         "description": "🌟 +25% ко ВСЕМ командам заработка на 30 дней"
     },
+    
+    # ПОСТОЯННЫЕ АРТЕФАКТЫ (цены не меняем, они и так дорогие)
     "permanent_pray": {
         "name": "Бибер-амулет",
         "price": 25000,
