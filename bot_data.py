@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 ADMIN_ROLE = "Admin"
 CURRENCY_NAME = "Бибсы"
 CURRENCY_EMOJI = "💰"
-COMMAND_CHANNEL = "тест"
+COMMAND_CHANNEL = "『🎰』boto-ввод"
 TRANSFER_FEE = 0.1
 GIFT_PRICE = 4000
 BIEBER_ESCAPE_INTERVAL = 1800
