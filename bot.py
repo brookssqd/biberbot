@@ -848,6 +848,58 @@ async def balance(ctx, member: discord.Member = None):
     )
     await ctx.send(embed=embed)
 
+@bot.command(name='билет')
+@in_command_channel()
+@add_command_reaction("билет")
+async def use_lottery_ticket(ctx):
+    """Использовать лотерейный билет"""
+    user_id = ctx.author.id
+    
+    # Проверяем, есть ли билеты
+    ticket_count = get_consumable_count(user_id, "lottery_ticket")
+    
+    if ticket_count <= 0:
+        embed = create_embed(
+            "🎫 НЕТ БИЛЕТОВ",
+            "У вас нет лотерейных билетов!\n\n"
+            "Купить можно в магазине: `!магазин`",
+            discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    # Используем один билет
+    use_consumable(user_id, "lottery_ticket")
+    
+    # Шанс выигрыша 10%
+    win_chance = 10
+    win_amount = 1000
+    
+    if random.randint(1, 100) <= win_chance:
+        # ВЫИГРЫШ
+        add_balance(user_id, win_amount)
+        
+        embed = create_embed(
+            "🎉 ПОЗДРАВЛЯЮ! ВЫ ВЫИГРАЛИ! 🎉",
+            f"Вы использовали лотерейный билет и выиграли **{win_amount} {EMOJIS['bibsy']}**!\n\n"
+            f"Осталось билетов: {ticket_count - 1}",
+            discord.Color.gold()
+        )
+        await ctx.send(embed=embed)
+        log_action(user_id, "lottery_win", f"Amount: {win_amount}")
+    else:
+        # ПРОИГРЫШ
+        embed = create_embed(
+            "😢 К СОЖАЛЕНИЮ, ВЫ НЕ ВЫИГРАЛИ",
+            f"Вы использовали лотерейный билет, но удача была не на вашей стороне.\n\n"
+            f"Осталось билетов: {ticket_count - 1}\n\n"
+            f"Шанс выигрыша: {win_chance}%",
+            discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+        log_action(user_id, "lottery_lose", f"Ticket used")
+
+
 # ==================== СОЦИАЛЬНЫЕ КОМАНДЫ ====================
 
 @bot.command(name='поцелуй')
@@ -1143,7 +1195,7 @@ async def buy(ctx, *, item_name: str):
 @bot.command(name='артефакты')
 @in_command_channel()
 async def artifacts_cmd(ctx):
-    """Показать ваши активные артефакты и расходники"""
+    """Показать ваши активные артефакты и расходные предметы"""
     user_id = ctx.author.id
     
     # Проверяем просроченные артефакты
@@ -1155,7 +1207,7 @@ async def artifacts_cmd(ctx):
     
     embed = create_embed(f"🔮 ИНВЕНТАРЬ {ctx.author.display_name}", "", discord.Color.blue())
     
-    # Активные артефакты
+    # ========== АКТИВНЫЕ АРТЕФАКТЫ ==========
     if artifacts:
         art_text = ""
         for art_id, art_data in artifacts.items():
@@ -1173,6 +1225,7 @@ async def artifacts_cmd(ctx):
                     art_text += f"**{item['name']}**\n└ {item['description']}\n└ {status}\n\n"
                 else:
                     art_text += f"**{item['name']}** 💎\n└ {item['description']}\n└ ♾️ Навсегда\n\n"
+        
         if art_text:
             embed.add_field(name="📦 АКТИВНЫЕ АРТЕФАКТЫ", value=art_text, inline=False)
         else:
@@ -1180,16 +1233,40 @@ async def artifacts_cmd(ctx):
     else:
         embed.add_field(name="📦 АКТИВНЫЕ АРТЕФАКТЫ", value="Нет активных артефактов", inline=False)
     
-    # Расходуемые предметы
+    # ========== РАСХОДУЕМЫЕ ПРЕДМЕТЫ ==========
     if consumables:
         cons_text = ""
+        
+        # Отображаем каждый расходник
         for cons_id, count in consumables.items():
             if cons_id in CONSUMABLE_ITEMS:
                 item = CONSUMABLE_ITEMS[cons_id]
-                cons_text += f"**{item['name']}** x{count}\n└ {item['description']}\n\n"
-        embed.add_field(name="⚡ РАСХОДУЕМЫЕ ПРЕДМЕТЫ", value=cons_text, inline=False)
+                
+                # Специальное отображение для лотерейного билета
+                if cons_id == "lottery_ticket":
+                    cons_text += f"**🎫 {item['name']}** x{count}\n└ {item['description']}\n└ Используйте `!билет` чтобы активировать\n\n"
+                elif cons_id == "doubler":
+                    cons_text += f"**⚡ {item['name']}** x{count}\n└ {item['description']}\n└ Сработает при следующей команде заработка\n\n"
+                elif cons_id == "shield":
+                    cons_text += f"**🛡️ {item['name']}** x{count}\n└ {item['description']}\n└ Защитит от штрафа в !экстаз\n\n"
+                elif cons_id == "card_charm":
+                    cons_text += f"**🎴 {item['name']}** x{count}\n└ {item['description']}\n└ +15% к шансу выпадения карты\n\n"
+                elif cons_id == "reset_cooldown":
+                    cons_text += f"**⏰ {item['name']}** x{count}\n└ {item['description']}\n└ Используйте `!сброситькд` чтобы активировать\n\n"
+                elif cons_id == "duel_shield":
+                    cons_text += f"**⚔️ {item['name']}** x{count}\n└ {item['description']}\n└ Защитит от проигрыша в дуэли\n\n"
+                else:
+                    cons_text += f"**{item['name']}** x{count}\n└ {item['description']}\n\n"
+        
+        if cons_text:
+            embed.add_field(name="⚡ РАСХОДУЕМЫЕ ПРЕДМЕТЫ", value=cons_text, inline=False)
+        else:
+            embed.add_field(name="⚡ РАСХОДУЕМЫЕ ПРЕДМЕТЫ", value="Нет расходуемых предметов", inline=False)
     else:
         embed.add_field(name="⚡ РАСХОДУЕМЫЕ ПРЕДМЕТЫ", value="Нет расходуемых предметов", inline=False)
+    
+    # ========== ПОДСКАЗКА ==========
+    embed.set_footer(text="💰 Артефакты можно купить в магазине: !магазин")
     
     await ctx.send(embed=embed)
 
@@ -2267,6 +2344,53 @@ async def fans_top(ctx):
     
     await ctx.send(embed=embed)
 
+@bot.command(name='сброситькд')
+@in_command_channel()
+@add_command_reaction("сброситькд")
+async def reset_cooldown_item(ctx):
+    """Использовать Эликсир времени для сброса кулдаунов"""
+    user_id = ctx.author.id
+    
+    # Проверяем, есть ли эликсир времени
+    elixir_count = get_consumable_count(user_id, "reset_cooldown")
+    
+    if elixir_count <= 0:
+        embed = create_embed(
+            "⏰ НЕТ ЭЛИКСИРА",
+            "У вас нет Эликсира времени!\n\n"
+            "Купить можно в магазине: `!магазин`\n"
+            "Эликсир времени сбрасывает кулдауны всех команд заработка.",
+            discord.Color.red()
+        )
+        await ctx.send(embed=embed)
+        return
+    
+    # Используем один эликсир
+    use_consumable(user_id, "reset_cooldown")
+    
+    # Сбрасываем кулдауны
+    supabase.table('users').update({
+        'last_pray': None,
+        'last_sermon': None,
+        'last_repent': None,
+        'last_ecstasy': None
+    }).eq('user_id', user_id).execute()
+    
+    embed = create_embed(
+        "⏰ КУЛДАУНЫ СБРОШЕНЫ!",
+        f"Вы использовали Эликсир времени!\n\n"
+        f"✅ Кулдауны всех команд заработка сброшены\n"
+        f"📦 Осталось эликсиров: {elixir_count - 1}\n\n"
+        f"Теперь вы можете снова использовать:\n"
+        f"• `!молиться`\n"
+        f"• `!проповедь`\n"
+        f"• `!экстаз`\n"
+        f"• `!покаяться`",
+        discord.Color.green()
+    )
+    await ctx.send(embed=embed)
+    log_action(user_id, "use_reset_cooldown", f"Remaining: {elixir_count - 1}")
+
 @bot.command(name='статистика')
 @in_command_channel()
 async def stats(ctx, member: discord.Member = None):
@@ -2581,17 +2705,19 @@ async def help_command(ctx):
     # 🏆 ДОСТИЖЕНИЯ
     embed.add_field(
         name="🏆 ДОСТИЖЕНИЯ",
-        value="`!ачивки [@участник]` - мои полученные достижения\n"
+        value="`!ачивки [@участник]` - полученные достижения\n"
               "`!достижения [категория]` - список всех достижений с условиями",
         inline=False
     )
-
-    # 🎮 ИГРЫ И ПРОЧЕЕ
+    
+    # 🎮 ИГРЫ И ПРОЧЕЕ (ОБНОВЛЕНО)
     embed.add_field(
         name="🎮 ИГРЫ И ПРОЧЕЕ",
         value="`!поймать` - поймать Бибера (появляется случайно)\n"
               "`!передать @участник сумма` - передать бибсы\n"
-              "`!признание текст` - анонимное признание",
+              "`!признание текст` - анонимное признание\n"
+              "`!билет` - использовать лотерейный билет (шанс выиграть 1000💰)\n"
+              "`!сброситькд` - сбросить кулдаун команд (есть Эликсир времени)",
         inline=False
     )
     
