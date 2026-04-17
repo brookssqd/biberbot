@@ -12,6 +12,10 @@ from functools import wraps
 from bot_data import *
 from supabase_db import *
 
+# ==================== БЛОКИРОВКА ОТ БЫСТРЫХ КОМАНД ====================
+user_command_lock = {}
+LOCK_TIME = 15  # секунд (между любыми командами одного пользователя)
+
 # ==================== НАСТРОЙКИ ====================
 TOKEN = os.environ.get('TOKEN')
 
@@ -136,7 +140,29 @@ def cooldown(command_name: str):
         @wraps(func)
         async def wrapper(ctx, *args, **kwargs):
             user_id = ctx.author.id
+            current_time = datetime.now().timestamp()
             
+            # === БЛОКИРОВКА ОТ БЫСТРОГО СПАМА (15 секунд) ===
+            if user_id in user_command_lock:
+                time_since = current_time - user_command_lock[user_id]
+                if time_since < LOCK_TIME:
+                    remaining = int(LOCK_TIME - time_since)
+                    embed = create_embed(
+                        title="⏳ ПОДОЖДИ!",
+                        description=f"Не спамь команды! Подожди **{remaining} секунд** перед следующей командой.",
+                        color=discord.Color.red()
+                    )
+                    await ctx.send(embed=embed, delete_after=3)
+                    try:
+                        await ctx.message.delete()
+                    except:
+                        pass
+                    return
+            
+            # Обновляем время последней команды
+            user_command_lock[user_id] = current_time
+            
+            # === ОСНОВНАЯ ПРОВЕРКА КУЛДАУНА ===
             response = supabase.table('users').select(f'last_{command_name}').eq('user_id', user_id).execute()
             last_time_str = None
             if response.data:
@@ -161,8 +187,8 @@ def cooldown(command_name: str):
                             time_str = f"{secs}с"
                         
                         embed = create_embed(
-                            title="⏳ Кулдаун!",
-                            description=f"Подожди **{time_str}** перед следующим использованием `!{command_name}`!",
+                            title="⏳ КУЛДАУН!",
+                            description=f"Команда `!{command_name}` будет доступна через **{time_str}**!",
                             color=discord.Color.red()
                         )
                         await ctx.send(embed=embed, delete_after=10)
@@ -172,6 +198,7 @@ def cooldown(command_name: str):
             
             result = await func(ctx, *args, **kwargs)
             
+            # Обновляем время в БД
             supabase.table('users').update({f'last_{command_name}': datetime.now().isoformat()}).eq('user_id', user_id).execute()
             
             return result
