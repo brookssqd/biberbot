@@ -364,14 +364,6 @@ CONSUMABLE_ITEMS = {
         "effect": {"type": "reset_cooldown", "command": "all"},
         "description": "Сбрасывает КД всех команд заработка (1 раз в день)"
     },
-    "lottery_ticket": {
-        "name": "🎫 Лотерейный билет",
-        "price": 100,
-        "type": "consumable",
-        "max_per_day": 10,
-        "effect": {"type": "lottery", "win_chance": 10, "win_amount": 1000},
-        "description": "Шанс 10% выиграть 1000 бибсов! (до 10 шт/день)"
-    },
     "duel_shield": {
         "name": "⚔️ Оберег дуэлянта",
         "price": 1800,

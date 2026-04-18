@@ -875,57 +875,6 @@ async def balance(ctx, member: discord.Member = None):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name='билет')
-@in_command_channel()
-@add_command_reaction("билет")
-async def use_lottery_ticket(ctx):
-    """Использовать лотерейный билет"""
-    user_id = ctx.author.id
-    
-    # Проверяем, есть ли билеты
-    ticket_count = get_consumable_count(user_id, "lottery_ticket")
-    
-    if ticket_count <= 0:
-        embed = create_embed(
-            "🎫 НЕТ БИЛЕТОВ",
-            "У вас нет лотерейных билетов!\n\n"
-            "Купить можно в магазине: `!магазин`",
-            discord.Color.red()
-        )
-        await ctx.send(embed=embed)
-        return
-    
-    # Используем один билет
-    use_consumable(user_id, "lottery_ticket")
-    
-    # Шанс выигрыша 10%
-    win_chance = 10
-    win_amount = 1000
-    
-    if random.randint(1, 100) <= win_chance:
-        # ВЫИГРЫШ
-        add_balance(user_id, win_amount)
-        
-        embed = create_embed(
-            "🎉 ПОЗДРАВЛЯЮ! ВЫ ВЫИГРАЛИ! 🎉",
-            f"Вы использовали лотерейный билет и выиграли **{win_amount} {EMOJIS['bibsy']}**!\n\n"
-            f"Осталось билетов: {ticket_count - 1}",
-            discord.Color.gold()
-        )
-        await ctx.send(embed=embed)
-        log_action(user_id, "lottery_win", f"Amount: {win_amount}")
-    else:
-        # ПРОИГРЫШ
-        embed = create_embed(
-            "😢 К СОЖАЛЕНИЮ, ВЫ НЕ ВЫИГРАЛИ",
-            f"Вы использовали лотерейный билет, но удача была не на вашей стороне.\n\n"
-            f"Осталось билетов: {ticket_count - 1}\n\n"
-            f"Шанс выигрыша: {win_chance}%",
-            discord.Color.blue()
-        )
-        await ctx.send(embed=embed)
-        log_action(user_id, "lottery_lose", f"Ticket used")
-
 
 # ==================== СОЦИАЛЬНЫЕ КОМАНДЫ ====================
 
@@ -2776,7 +2725,6 @@ async def help_command(ctx):
         value="`!поймать` - поймать Бибера (появляется случайно)\n"
               "`!передать @участник сумма` - передать бибсы\n"
               "`!признание текст` - анонимное признание\n"
-              "`!билет` - использовать лотерейный билет (шанс выиграть 1000💰)\n"
               "`!сброситькд` - сбросить кулдаун команд (есть Эликсир времени)",
         inline=False
     )
@@ -2827,43 +2775,6 @@ async def confession(ctx, *, confession_text: str):
     
     await ctx.message.delete()
 
-@bot.command(name='диагностика')
-@in_command_channel()
-async def diagnostics(ctx):
-    """Диагностика лимита билетов"""
-    user_id = ctx.author.id
-    today = datetime.now().strftime('%Y-%m-%d')
-    
-    # Проверка 1: прямая проверка таблицы
-    response = supabase.table('consumable_purchases') \
-        .select('*') \
-        .eq('user_id', user_id) \
-        .eq('item_id', 'lottery_ticket') \
-        .eq('purchase_date', today) \
-        .execute()
-    
-    direct_count = len(response.data)
-    
-    # Проверка 2: через функцию
-    func_count = get_daily_consumable_purchases(user_id, "lottery_ticket")
-    
-    # Проверка 3: max_per_day из конфига
-    max_per_day = 10
-    for key, item in CONSUMABLE_ITEMS.items():
-        if key == "lottery_ticket":
-            max_per_day = item.get("max_per_day", 3)
-            break
-    
-    embed = create_embed(
-        "🔍 ДИАГНОСТИКА ЛИМИТА БИЛЕТОВ",
-        f"📅 Сегодня: {today}\n"
-        f"📊 Прямой запрос: {direct_count} покупок\n"
-        f"📊 Через функцию: {func_count} покупок\n"
-        f"⚙️ Лимит в конфиге: {max_per_day} шт/день\n\n"
-        f"📋 Данные из таблицы: {response.data}",
-        discord.Color.blue()
-    )
-    await ctx.send(embed=embed)
 # ==================== АДМИН-КОМАНДЫ ====================
 
 @bot.command(name='выдать')
