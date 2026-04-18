@@ -1121,6 +1121,7 @@ async def shop(ctx):
 @in_command_channel()
 @add_command_reaction("купить")
 async def buy(ctx, *, item_name: str):
+    """Купить артефакт или расходный предмет"""
     try:
         user_id = ctx.author.id
         
@@ -1143,7 +1144,7 @@ async def buy(ctx, *, item_name: str):
                     is_consumable = True
                     break
         
-        if not item_id:
+        if not item_data:
             embed = create_embed("❌ Ошибка", "Товар не найден! Используйте `!магазин`", discord.Color.red())
             await ctx.send(embed=embed)
             return
@@ -1155,63 +1156,95 @@ async def buy(ctx, *, item_name: str):
             await ctx.send(embed=embed)
             return
         
+        # ========== РАСХОДУЕМЫЕ ПРЕДМЕТЫ ==========
         if is_consumable:
             max_per_day = item_data.get("max_per_day", 3)
             purchases_today = get_daily_consumable_purchases(user_id, item_id)
             
+            # Проверка лимита
             if purchases_today >= max_per_day:
-                embed = create_embed("❌ Лимит покупок", f"Вы можете купить не более {max_per_day} шт. {item_data['name']} в день!", discord.Color.red())
+                embed = create_embed(
+                    "❌ ЛИМИТ ПОКУПОК",
+                    f"Вы можете купить не более {max_per_day} шт. **{item_data['name']}** в день!\n"
+                    f"Сегодня куплено: {purchases_today}/{max_per_day}",
+                    discord.Color.red()
+                )
                 await ctx.send(embed=embed)
                 return
             
             # Снимаем деньги
             add_balance(user_id, -item_data["price"])
-            # Добавляем расходник
+            
+            # Добавляем расходник в инвентарь
             add_consumable(user_id, item_id)
-            # Записываем покупку
+            
+            # ЗАПИСЫВАЕМ ПОКУПКУ В ТАБЛИЦУ (ЭТО ВАЖНО!)
             add_consumable_purchase(user_id, item_id)
             
             # Проверяем, что добавилось
-            check_count = get_consumable_count(user_id, item_id)
-            print(f"[BUY] {user_id} купил {item_id}, теперь {check_count} шт.")
+            new_count = get_consumable_count(user_id, item_id)
             
-            embed = create_embed("✅ Покупка успешна!", f"Вы купили **{item_data['name']}**!\n{item_data['description']}\n\n📦 В наличии: {check_count} шт.", discord.Color.green())
+            embed = create_embed(
+                "✅ ПОКУПКА УСПЕШНА!",
+                f"Вы купили **{item_data['name']}**!\n"
+                f"{item_data['description']}\n\n"
+                f"📦 В инвентаре: {new_count} шт.\n"
+                f"📊 Сегодня куплено: {purchases_today + 1}/{max_per_day}",
+                discord.Color.green()
+            )
             await ctx.send(embed=embed)
             log_action(user_id, "buy_consumable", f"{item_id}, Price: {item_data['price']}")
-            
+            return
+        
+        # ========== ВРЕМЕННЫЕ АРТЕФАКТЫ ==========
         elif item_data["type"] == "temporary":
             duration_days = item_data.get("duration_days", 7)
             
             # Снимаем деньги
             add_balance(user_id, -item_data["price"])
+            
             # Добавляем временный артефакт
             success = add_temporary_artifact(user_id, item_id, duration_days)
             
             if success:
-                embed = create_embed("✅ Покупка успешна!", f"Вы купили **{item_data['name']}**!\n📅 Действует: {duration_days} дней\n✨ {item_data['description']}", discord.Color.green())
+                embed = create_embed(
+                    "✅ ПОКУПКА УСПЕШНА!",
+                    f"Вы купили **{item_data['name']}**!\n"
+                    f"📅 Действует: {duration_days} дней\n"
+                    f"✨ {item_data['description']}",
+                    discord.Color.green()
+                )
                 await ctx.send(embed=embed)
                 log_action(user_id, "buy_temporary_artifact", f"{item_id}, Price: {item_data['price']}")
             else:
-                # Возвращаем деньги
                 add_balance(user_id, item_data["price"])
                 embed = create_embed("❌ Ошибка", "Не удалось добавить артефакт. Попробуйте позже.", discord.Color.red())
                 await ctx.send(embed=embed)
-            
+            return
+        
+        # ========== ПОСТОЯННЫЕ АРТЕФАКТЫ ==========
         elif item_data["type"] == "permanent":
             # Снимаем деньги
             add_balance(user_id, -item_data["price"])
+            
             # Добавляем постоянный артефакт
             success = add_permanent_artifact(user_id, item_id)
             
             if success:
-                embed = create_embed("✅ Покупка успешна!", f"Вы купили **{item_data['name']}**!\n💎 Действует: НАВСЕГДА\n✨ {item_data['description']}", discord.Color.green())
+                embed = create_embed(
+                    "✅ ПОКУПКА УСПЕШНА!",
+                    f"Вы купили **{item_data['name']}**!\n"
+                    f"💎 Действует: НАВСЕГДА\n"
+                    f"✨ {item_data['description']}",
+                    discord.Color.green()
+                )
                 await ctx.send(embed=embed)
                 log_action(user_id, "buy_permanent_artifact", f"{item_id}, Price: {item_data['price']}")
             else:
-                # Возвращаем деньги
                 add_balance(user_id, item_data["price"])
                 embed = create_embed("❌ Ошибка", "Не удалось добавить артефакт. Попробуйте позже.", discord.Color.red())
                 await ctx.send(embed=embed)
+            return
         
     except Exception as e:
         print(f"[ERROR] buy: {e}")
