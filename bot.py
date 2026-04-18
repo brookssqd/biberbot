@@ -2794,6 +2794,43 @@ async def confession(ctx, *, confession_text: str):
     
     await ctx.message.delete()
 
+@bot.command(name='диагностика')
+@in_command_channel()
+async def diagnostics(ctx):
+    """Диагностика лимита билетов"""
+    user_id = ctx.author.id
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    # Проверка 1: прямая проверка таблицы
+    response = supabase.table('consumable_purchases') \
+        .select('*') \
+        .eq('user_id', user_id) \
+        .eq('item_id', 'lottery_ticket') \
+        .eq('purchase_date', today) \
+        .execute()
+    
+    direct_count = len(response.data)
+    
+    # Проверка 2: через функцию
+    func_count = get_daily_consumable_purchases(user_id, "lottery_ticket")
+    
+    # Проверка 3: max_per_day из конфига
+    max_per_day = 10
+    for key, item in CONSUMABLE_ITEMS.items():
+        if key == "lottery_ticket":
+            max_per_day = item.get("max_per_day", 3)
+            break
+    
+    embed = create_embed(
+        "🔍 ДИАГНОСТИКА ЛИМИТА БИЛЕТОВ",
+        f"📅 Сегодня: {today}\n"
+        f"📊 Прямой запрос: {direct_count} покупок\n"
+        f"📊 Через функцию: {func_count} покупок\n"
+        f"⚙️ Лимит в конфиге: {max_per_day} шт/день\n\n"
+        f"📋 Данные из таблицы: {response.data}",
+        discord.Color.blue()
+    )
+    await ctx.send(embed=embed)
 # ==================== АДМИН-КОМАНДЫ ====================
 
 @bot.command(name='выдать')
